@@ -11088,7 +11088,9 @@ function Library:CreateWindow(WindowInfo)
     local CurrentTabDescription
     local ResizeButton
     local Tabs
+    local TabsCorner
     local Container
+    local ContainerCorner
     local BackgroundImage
     local HasBackgroundImage = false
     local FooterLabel
@@ -11430,6 +11432,7 @@ function Library:CreateWindow(WindowInfo)
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 1),
                 BackgroundTransparency = 1,
+                BorderSizePixel = 0,
                 Position = UDim2.new(1, 0, 1, 0),
                 Size = UDim2.fromOffset(20, 20),
                 Text = "",
@@ -11624,6 +11627,13 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.new(0, InitialLeftWidth, 1, -TabsBottomOffset),
             Parent = MainFrame,
         })
+        TabsCorner = New("UICorner", {
+            TopLeftRadius = UDim.new(0, 0),
+            TopRightRadius = UDim.new(0, 0),
+            BottomLeftRadius = UDim.new(0, WindowInfo.CornerRadius),
+            BottomRightRadius = UDim.new(0, 0),
+            Parent = Tabs,
+        })
         New("UIListLayout", {
             Padding = UDim.new(0, TabButtonsStyle.Gap),
             Parent = Tabs,
@@ -11648,8 +11658,15 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -49),
             Parent = MainFrame,
         })
+        ContainerCorner = New("UICorner", {
+            TopLeftRadius = UDim.new(0, 0),
+            TopRightRadius = UDim.new(0, 0),
+            BottomLeftRadius = UDim.new(0, 0),
+            BottomRightRadius = UDim.new(0, WindowInfo.CornerRadius),
+            Parent = Container,
+        })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 0),
+            PaddingBottom = UDim.new(0, 4),
             PaddingLeft = UDim.new(0, 6),
             PaddingRight = UDim.new(0, 6),
             PaddingTop = UDim.new(0, 0),
@@ -11845,6 +11862,13 @@ function Library:CreateWindow(WindowInfo)
 
         Library.CornerRadius = Radius
         WindowInfo.CornerRadius = Radius
+
+        if ContainerCorner then
+            ContainerCorner.BottomRightRadius = RadiusUDim
+        end
+        if TabsCorner then
+            TabsCorner.BottomLeftRadius = RadiusUDim
+        end
 
         if ResizeButton then
             ResizeButton.Position = UDim2.new(1, 0, 1, 0)
