@@ -406,7 +406,9 @@ local Templates = {
         MobileButtonsSide = "Left",
         MobileButtonsOffset = UDim2.fromOffset(20, 14),
         ToggleIcon = "rbxassetid://81779667323093",
-        ToggleIconSize = UDim2.fromOffset(50, 50),
+        ToggleIconSize = UDim2.fromOffset(42, 42),
+        ToggleBackgroundColor = "BackgroundColor",
+        ToggleIconColor = "FontColor",
 
         UnlockMouseWhileOpen = true,
 
@@ -3178,9 +3180,9 @@ function Library:AddDraggableButton(...)
     }
 
     local Button = New("TextButton", {
-        BackgroundColor3 = BackgroundColor3 or "MainColor",
+        BackgroundColor3 = BackgroundColor3 or "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
-        Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
+        Size = Size or (Icon and UDim2.fromOffset(42, 42)) or UDim2.fromOffset(0, 0),
         Text = (not Icon and Text) or "",
         TextSize = 16,
         ZIndex = 1,
@@ -3206,10 +3208,12 @@ function Library:AddDraggableButton(...)
     local IconLabel
     if Icon then
         IconLabel = New("ImageLabel", {
+            Active = false,
+            Selectable = false,
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundTransparency = 1,
             Image = Icon,
-            ImageColor3 = IconColor or Color3.fromRGB(255, 255, 255),
+            ImageColor3 = IconColor or "FontColor",
             Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromScale(0.68, 0.68),
             ScaleType = Enum.ScaleType.Fit,
@@ -3219,28 +3223,48 @@ function Library:AddDraggableButton(...)
         DraggableButton.IconLabel = IconLabel
     end
 
-    local MaxClickDistance = ExcludeDragging and 12 or math.huge
+    local DragMoved = false
+    local DragStartPos = nil
+    local LastClickTime = 0
+
+    local function TriggerClick()
+        if DragMoved then
+            return
+        end
+        local Now = tick()
+        if Now - LastClickTime < 0.2 then
+            return
+        end
+        LastClickTime = Now
+        Library:SafeCallback(Func, DraggableButton)
+    end
+
     Button.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) then
             return
         end
+        DragStartPos = Input.Position
+        DragMoved = false
+    end)
 
-        local StartPos = Input.Position
-        local Changed
-        Changed = Input.Changed:Connect(function()
-            if Input.UserInputState ~= Enum.UserInputState.End then
-                return
+    Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
+        if DragStartPos and IsHoverInput(Input) then
+            if (Input.Position - DragStartPos).Magnitude > 16 then
+                DragMoved = true
             end
+        end
+    end))
 
-            if (Input.Position - StartPos).Magnitude <= MaxClickDistance then
-                Library:SafeCallback(Func, DraggableButton)
-            end
+    Button.Activated:Connect(TriggerClick)
 
-            if Changed and Changed.Connected then
-                Changed:Disconnect()
-                Changed = nil
+    Button.InputEnded:Connect(function(Input: InputObject)
+        if DragStartPos and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+            if (Input.Position - DragStartPos).Magnitude <= 16 and not DragMoved then
+                TriggerClick()
             end
-        end)
+            DragStartPos = nil
+            DragMoved = false
+        end
     end)
 
     function DraggableButton:SetText(NewText: string)
@@ -13904,7 +13928,9 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.ToggleIcon then
             ToggleButton = Library:AddDraggableButton({
                 Icon = WindowInfo.ToggleIcon,
-                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(50, 50),
+                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(42, 42),
+                BackgroundColor3 = WindowInfo.ToggleBackgroundColor or "BackgroundColor",
+                IconColor = WindowInfo.ToggleIconColor or "FontColor",
                 Func = function()
                     Library:Toggle()
                 end,
