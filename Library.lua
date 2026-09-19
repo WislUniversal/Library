@@ -249,6 +249,7 @@ local Library = {
 
     --// Options \\--
     ToggleKeybind = Enum.KeyCode.RightControl,
+    AllowModifiers = false,
     ShowToggleFrameInKeybinds = true,
 
     NotifyOnError = false,
@@ -399,14 +400,15 @@ local Templates = {
 
         Font = Enum.Font.FredokaOne,
         ToggleKeybind = Enum.KeyCode.RightControl,
+        AllowModifiers = false,
 
         IsMobile = nil,
         ShowMobileButtons = true,
         ShowLockButton = false,
         MobileButtonsSide = "Left",
-        MobileButtonsOffset = UDim2.fromOffset(20, 14),
+        MobileButtonsOffset = UDim2.fromOffset(38, 16),
         ToggleIcon = "rbxassetid://81779667323093",
-        ToggleIconSize = UDim2.fromOffset(42, 42),
+        ToggleIconSize = UDim2.fromOffset(50, 50),
         ToggleBackgroundColor = "BackgroundColor",
         ToggleIconColor = "FontColor",
 
@@ -596,6 +598,8 @@ local Templates = {
 
         Default = "None",
         DefaultModifiers = {},
+
+        AllowModifiers = false,
 
         Blacklisted = {},
         BlacklistedModifiers = {},
@@ -3182,7 +3186,7 @@ function Library:AddDraggableButton(...)
     local Button = New("TextButton", {
         BackgroundColor3 = BackgroundColor3 or "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
-        Size = Size or (Icon and UDim2.fromOffset(42, 42)) or UDim2.fromOffset(0, 0),
+        Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
         Text = (not Icon and Text) or "",
         TextSize = 16,
         ZIndex = 1,
@@ -4050,6 +4054,10 @@ do
             Modifiers = Info.DefaultModifiers, -- Modifiers
             DisplayValue = Info.Default, -- Picker Text
 
+            AllowModifiers = if Info.AllowModifiers ~= nil
+                then Info.AllowModifiers
+                else (if Library.AllowModifiers ~= nil then Library.AllowModifiers else false),
+
             Blacklisted = Info.Blacklisted,
             BlacklistedModifiers = Info.BlacklistedModifiers,
             Whitelisted = Info.Whitelisted,
@@ -4129,7 +4137,9 @@ do
         }
 
         local IsModifierInput = function(Input)
-            return Input.UserInputType == Enum.UserInputType.Keyboard and ModifiersInput[Input.KeyCode] ~= nil
+            return KeyPicker.AllowModifiers == true
+                and Input.UserInputType == Enum.UserInputType.Keyboard
+                and ModifiersInput[Input.KeyCode] ~= nil
         end
 
         local GetActiveModifiers = function()
@@ -4174,14 +4184,21 @@ do
                 return false
             end
 
-            if SpecialKeysInput[Input.UserInputType] ~= nil then
-                return UserInputService:IsMouseButtonPressed(Input.UserInputType)
-                    and not UserInputService:GetFocusedTextBox()
-            elseif Input.UserInputType == Enum.UserInputType.Keyboard then
-                return UserInputService:IsKeyDown(Input.KeyCode) and not UserInputService:GetFocusedTextBox()
-            else
-                return false
-            end
+            local Success, Result = pcall(function()
+                if SpecialKeysInput[Input.UserInputType] ~= nil then
+                    return UserInputService:IsMouseButtonPressed(Input.UserInputType)
+                        and not UserInputService:GetFocusedTextBox()
+                elseif Input.UserInputType == Enum.UserInputType.Keyboard then
+                    if Input.KeyCode == Enum.KeyCode.Unknown then
+                        return false
+                    end
+                    return UserInputService:IsKeyDown(Input.KeyCode) and not UserInputService:GetFocusedTextBox()
+                else
+                    return false
+                end
+            end)
+
+            return Success and Result == true
         end
 
         local ConvertToInputModifiers = function(CurrentModifiers)
@@ -4944,6 +4961,10 @@ do
                     return true
                 end
 
+                if InputObj.UserInputType == Enum.UserInputType.Keyboard and InputObj.KeyCode == Enum.KeyCode.Unknown then
+                    return false
+                end
+
                 local IsMod = IsModifierInput(InputObj)
                 local KeyName
                 if SpecialKeysInput[InputObj.UserInputType] ~= nil then
@@ -4956,120 +4977,132 @@ do
                     end
                 end
 
-                if KeyName then
-                    if IsMod then
-                        if KeyPicker.WhitelistedModifiers and #KeyPicker.WhitelistedModifiers > 0 and not table.find(KeyPicker.WhitelistedModifiers, KeyName) then
-                            return false
-                        end
+                if not KeyName or KeyName == "Unknown" then
+                    return false
+                end
 
-                        if KeyPicker.BlacklistedModifiers and table.find(KeyPicker.BlacklistedModifiers, KeyName) then
-                            return false
-                        end
-                    else
-                        if KeyPicker.Whitelisted and #KeyPicker.Whitelisted > 0 and not table.find(KeyPicker.Whitelisted, KeyName) then
-                            return false
-                        end
+                if IsMod then
+                    if KeyPicker.WhitelistedModifiers and #KeyPicker.WhitelistedModifiers > 0 and not table.find(KeyPicker.WhitelistedModifiers, KeyName) then
+                        return false
+                    end
 
-                        if KeyPicker.Blacklisted and table.find(KeyPicker.Blacklisted, KeyName) then
-                            return false
-                        end
+                    if KeyPicker.BlacklistedModifiers and table.find(KeyPicker.BlacklistedModifiers, KeyName) then
+                        return false
+                    end
+                else
+                    if KeyPicker.Whitelisted and #KeyPicker.Whitelisted > 0 and not table.find(KeyPicker.Whitelisted, KeyName) then
+                        return false
+                    end
+
+                    if KeyPicker.Blacklisted and table.find(KeyPicker.Blacklisted, KeyName) then
+                        return false
                     end
                 end
 
                 return true
             end
 
-            -- Wait for the first valid InputBegan --
-            while true do
-                local InputObj = UserInputService.InputBegan:Wait()
-                if UserInputService:GetFocusedTextBox() ~= nil then
-                    SetPickingState(false)
-                    return
-                end
-
-                if IsValidInput(InputObj) then
-                    CurrentInput = InputObj
-                    break
-                end
-            end
-
-            -- If it's a modifier key, we wait for either its release or another input --
-            while IsModifierInput(CurrentInput) do
-                if CurrentInput.KeyCode == Enum.KeyCode.Escape then
-                    break
-                end
-
-                -- Display the current state including the current modifier key --
-                local ModName = ModifiersInput[CurrentInput.KeyCode]
-                if ModName then
-                    local text = if #ActiveModifiers > 0 then table.concat(ActiveModifiers, " + ") .. " + " .. ModName .. " + ..." else ModName .. " + ..."
-                    KeyPicker:Display(text)
-                end
-
-                local NextInput = nil
-                local Released = false
-
-                local BeganConn
-                local EndedConn
-
-                BeganConn = UserInputService.InputBegan:Connect(function(InputObj)
-                    if UserInputService:GetFocusedTextBox() ~= nil then
+            local Success, _ = pcall(function()
+                -- Wait for the first valid InputBegan --
+                while true do
+                    local InputObj = UserInputService.InputBegan:Wait()
+                    if UserInputService:GetFocusedTextBox() ~= nil or Library.Unloaded then
                         return
                     end
+
                     if IsValidInput(InputObj) then
-                        NextInput = InputObj
-                    end
-                end)
-
-                EndedConn = UserInputService.InputEnded:Connect(function(InputObj)
-                    if InputObj.KeyCode == CurrentInput.KeyCode then
-                        Released = true
-                    end
-                end)
-
-                repeat
-                    task.wait()
-                until Released or NextInput or UserInputService:GetFocusedTextBox() ~= nil or Library.Unloaded
-
-                if BeganConn then BeganConn:Disconnect() end
-                if EndedConn then EndedConn:Disconnect() end
-
-                if UserInputService:GetFocusedTextBox() ~= nil or Library.Unloaded then
-                    SetPickingState(false)
-                    return
-                end
-
-                if Released then
-                    break -- Use modifier key as bind
-                elseif NextInput then
-                    -- Add another modifier or continue to normal key
-                    local OldModName = ModifiersInput[CurrentInput.KeyCode]
-                    if OldModName and not table.find(ActiveModifiers, OldModName) then
-                        ActiveModifiers[#ActiveModifiers + 1] = OldModName
-                    end
-
-                    CurrentInput = NextInput
-                    if CurrentInput.KeyCode == Enum.KeyCode.Escape then
+                        CurrentInput = InputObj
                         break
                     end
                 end
-            end
 
-            local Key = "Unknown"
-            if SpecialKeysInput[CurrentInput.UserInputType] ~= nil then
-                Key = SpecialKeysInput[CurrentInput.UserInputType]
-            elseif CurrentInput.UserInputType == Enum.UserInputType.Keyboard then
-                Key = CurrentInput.KeyCode == Enum.KeyCode.Escape and "None" or CurrentInput.KeyCode.Name
-            end
+                -- If modifiers are enabled and it's a modifier key, wait for release or another input --
+                if KeyPicker.AllowModifiers then
+                    while IsModifierInput(CurrentInput) do
+                        if CurrentInput.KeyCode == Enum.KeyCode.Escape then
+                            break
+                        end
 
-            ActiveModifiers = if CurrentInput.KeyCode == Enum.KeyCode.Escape or Key == "Unknown" then {} else ActiveModifiers
+                        local ModName = ModifiersInput[CurrentInput.KeyCode]
+                        if ModName then
+                            local text = if #ActiveModifiers > 0 then table.concat(ActiveModifiers, " + ") .. " + " .. ModName .. " + ..." else ModName .. " + ..."
+                            KeyPicker:Display(text)
+                        end
 
-            KeyPicker.Toggled = if ParentObj.Type == "Toggle" then ParentObj.Value else false
-            KeyPicker:SetValue({ Key, KeyPicker.Mode, ActiveModifiers })
+                        local NextInput = nil
+                        local Released = not IsInputDown(CurrentInput)
 
-            repeat
-                task.wait()
-            until not IsInputDown(CurrentInput) or UserInputService:GetFocusedTextBox()
+                        local BeganConn
+                        local EndedConn
+
+                        BeganConn = UserInputService.InputBegan:Connect(function(InputObj)
+                            if UserInputService:GetFocusedTextBox() ~= nil then
+                                return
+                            end
+                            if IsValidInput(InputObj) then
+                                NextInput = InputObj
+                            end
+                        end)
+
+                        EndedConn = UserInputService.InputEnded:Connect(function(InputObj)
+                            if InputObj.KeyCode == CurrentInput.KeyCode then
+                                Released = true
+                            end
+                        end)
+
+                        local ModTimeout = tick() + 2.5
+                        repeat
+                            task.wait()
+                        until Released or NextInput or not IsInputDown(CurrentInput) or UserInputService:GetFocusedTextBox() ~= nil or Library.Unloaded or (tick() > ModTimeout)
+
+                        if BeganConn then BeganConn:Disconnect() end
+                        if EndedConn then EndedConn:Disconnect() end
+
+                        if UserInputService:GetFocusedTextBox() ~= nil or Library.Unloaded then
+                            return
+                        end
+
+                        if Released or not IsInputDown(CurrentInput) or (not NextInput and tick() > ModTimeout) then
+                            break -- Use modifier key as bind
+                        elseif NextInput then
+                            local OldModName = ModifiersInput[CurrentInput.KeyCode]
+                            if OldModName and not table.find(ActiveModifiers, OldModName) then
+                                ActiveModifiers[#ActiveModifiers + 1] = OldModName
+                            end
+
+                            CurrentInput = NextInput
+                            if CurrentInput.KeyCode == Enum.KeyCode.Escape then
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if not CurrentInput then
+                    return
+                end
+
+                local Key = "Unknown"
+                if SpecialKeysInput[CurrentInput.UserInputType] ~= nil then
+                    Key = SpecialKeysInput[CurrentInput.UserInputType]
+                elseif CurrentInput.UserInputType == Enum.UserInputType.Keyboard then
+                    Key = CurrentInput.KeyCode == Enum.KeyCode.Escape and "None" or CurrentInput.KeyCode.Name
+                end
+
+                if not KeyPicker.AllowModifiers then
+                    ActiveModifiers = {}
+                else
+                    ActiveModifiers = if CurrentInput.KeyCode == Enum.KeyCode.Escape or Key == "Unknown" then {} else ActiveModifiers
+                end
+
+                KeyPicker.Toggled = if ParentObj.Type == "Toggle" then ParentObj.Value else false
+                KeyPicker:SetValue({ Key, KeyPicker.Mode, ActiveModifiers })
+
+                local ReleaseTimeout = tick() + 0.5
+                repeat
+                    task.wait()
+                until not IsInputDown(CurrentInput) or UserInputService:GetFocusedTextBox() or (tick() > ReleaseTimeout)
+            end)
 
             SetPickingState(false)
         end))
@@ -10733,6 +10766,8 @@ function Library:CreateWindow(WindowInfo)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
     Library.Scheme.Font = WindowInfo.Font
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
+    Library.AllowModifiers = if WindowInfo.AllowModifiers ~= nil then WindowInfo.AllowModifiers else false
+    Window.AllowModifiers = Library.AllowModifiers
     Library.GlobalSearch = WindowInfo.GlobalSearch
 
     Library.Animations = WindowInfo.Animations
@@ -13928,7 +13963,7 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.ToggleIcon then
             ToggleButton = Library:AddDraggableButton({
                 Icon = WindowInfo.ToggleIcon,
-                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(42, 42),
+                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(50, 50),
                 BackgroundColor3 = WindowInfo.ToggleBackgroundColor or "BackgroundColor",
                 IconColor = WindowInfo.ToggleIconColor or "FontColor",
                 Func = function()
@@ -13951,7 +13986,7 @@ function Library:CreateWindow(WindowInfo)
             end, true, true)
         end
 
-        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(20, 14)
+        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(38, 16)
 
         if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
@@ -14015,8 +14050,10 @@ function Library:CreateWindow(WindowInfo)
             return
         end
 
-        if Input.KeyCode == Library.ToggleKeybind then
-            Library:Toggle()
+        if typeof(Library.ToggleKeybind) == "EnumItem" then
+            if Input.KeyCode == Library.ToggleKeybind then
+                Library:Toggle()
+            end
         end
     end))
 
