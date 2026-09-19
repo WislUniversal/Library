@@ -175,8 +175,6 @@ local Library = {
 
     Window = nil,
     WindowContainer = nil,
-    WindowTabsFrame = nil,
-    SavedWindowPosition = nil,
 
     --// Search \\--
     SearchText = "",
@@ -2140,62 +2138,6 @@ local function GetSnapGuideOffset(Name: string, SnappedValue: number, ElemDimens
     return SnappedValue -- LeftEdge / TopEdge
 end
 
-local DragCulledObjects: { GuiObject } = {}
-
-function Library:ApplyDragCulling()
-    self:RestoreDragCulling()
-
-    local function CullScrollingFrame(sf: ScrollingFrame)
-        if not sf or not sf:IsA("ScrollingFrame") or not sf.Visible then
-            return
-        end
-
-        local sfTop = sf.AbsolutePosition.Y
-        local sfBottom = sfTop + sf.AbsoluteSize.Y
-
-        for _, child in sf:GetChildren() do
-            if child:IsA("GuiObject") and child.Visible then
-                local cTop = child.AbsolutePosition.Y
-                local cBottom = cTop + child.AbsoluteSize.Y
-
-                if cBottom <= sfTop or cTop >= sfBottom then
-                    child.Visible = false
-                    table.insert(DragCulledObjects, child)
-                end
-            end
-        end
-    end
-
-    pcall(function()
-        if Library.ActiveTab and typeof(Library.ActiveTab) == "table" and Library.ActiveTab.Sides then
-            for _, Side in Library.ActiveTab.Sides do
-                CullScrollingFrame(Side)
-            end
-        elseif Library.Tabs then
-            for _, Tab in Library.Tabs do
-                if typeof(Tab) == "table" and Tab.Sides and Tab.Container and Tab.Container.Visible then
-                    for _, Side in Tab.Sides do
-                        CullScrollingFrame(Side)
-                    end
-                end
-            end
-        end
-    end)
-end
-
-function Library:RestoreDragCulling()
-    if #DragCulledObjects > 0 then
-        for _, obj in DragCulledObjects do
-            pcall(function()
-                if obj and obj.Parent then
-                    obj.Visible = true
-                end
-            end)
-        end
-        table.clear(DragCulledObjects)
-    end
-end
-
 function Library:MakeDraggable(
     UI: GuiObject,
     DragFrame: GuiObject,
@@ -2213,9 +2155,6 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
-    local CurrentTilt = 0
-    local TargetTilt = 0
-    local LastAppliedTilt = 0
 
     local CachedViewportSize = Vector2.new(1920, 1080)
     local CachedElemSize = Vector2.new(600, 400)
@@ -2274,11 +2213,6 @@ function Library:MakeDraggable(
         Dragging = false
         HideSnapGuides()
 
-        if IsMainWindow and FramePos then
-            Library.SavedWindowPosition = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
-            Library:RestoreDragCulling()
-        end
-
         if MoveConnection then
             MoveConnection:Disconnect()
             MoveConnection = nil
@@ -2296,14 +2230,10 @@ function Library:MakeDraggable(
                 PhysicsConnection = nil
             end
             UI.Rotation = 0
-            CurrentTilt = 0
-            TargetTilt = 0
-            LastAppliedTilt = 0
             if FramePos then
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
-                    Library.SavedWindowPosition = UI.Position
-                    Library:RestoreDragCulling()
+                    SavedWindowPosition = UI.Position
                 end
             end
         end
@@ -2317,31 +2247,23 @@ function Library:MakeDraggable(
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
 
-            local FollowRate = if IsMainWindow then (Dragging and 22 or 26) else (Dragging and 30 or 24)
+            local FollowRate = Dragging and 26 or 20
             local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
 
-            UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
-
-            if IsMainWindow and UI.Rotation ~= 0 then
-                UI.Rotation = 0
-            end
+            UI.Position = UDim2.new(BaseScaleX, CurrentPos.X, BaseScaleY, CurrentPos.Y)
+            UI.Rotation = 0
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-
-                if Dist < 0.5 then
+                if Dist < 0.25 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     UI.Rotation = 0
-                    CurrentTilt = 0
-                    TargetTilt = 0
-                    LastAppliedTilt = 0
                     if IsMainWindow then
-                        Library.SavedWindowPosition = UI.Position
-                        Library:RestoreDragCulling()
+                        SavedWindowPosition = UI.Position
                     end
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
@@ -2362,14 +2284,6 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
-        CurrentTilt = 0
-        TargetTilt = 0
-        LastAppliedTilt = 0
-        UI.Rotation = 0
-
-        if IsMainWindow then
-            Library:RestoreDragCulling()
-        end
 
         local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
         CachedViewportSize = ViewportSize
@@ -2438,9 +2352,6 @@ function Library:MakeDraggable(
             end
 
             TargetPos = Vector2.new(NewX, NewY)
-            if IsMainWindow and FramePos then
-                Library.SavedWindowPosition = UDim2.new(FramePos.X.Scale, NewX, FramePos.Y.Scale, NewY)
-            end
         end)
 
         EndConnection = UserInputService.InputEnded:Connect(function(EndInput: InputObject)
@@ -2470,10 +2381,6 @@ function Library:MakeDraggable(
 
         if InputBegan and InputBegan.Connected then
             InputBegan:Disconnect()
-        end
-
-        if IsMainWindow then
-            Library:RestoreDragCulling()
         end
 
         if SnapGuideX then
@@ -3427,10 +3334,6 @@ function Library:AddDraggableButton(...)
 
     local CurrentButtonPos = Vector2.new(0, 0)
     local TargetButtonPos = Vector2.new(0, 0)
-    local PrevTargetBtnX = 0
-    local BtnVelocityX = 0
-    local CurrentBtnTilt = 0
-    local TargetBtnTilt = 0
     local SavedAnchorPoint: Vector2? = nil
 
     local CachedHalfW = 25
@@ -3488,28 +3391,12 @@ function Library:AddDraggableButton(...)
             local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentButtonPos = CurrentButtonPos:Lerp(TargetButtonPos, FollowAlpha)
 
-            local InstantVelX = (TargetButtonPos.X - PrevTargetBtnX) / dtClamped
-            PrevTargetBtnX = TargetButtonPos.X
-            local VelAlpha = 1 - math.exp(-16 * dtClamped)
-            BtnVelocityX = BtnVelocityX + (InstantVelX - BtnVelocityX) * VelAlpha
-
-            if IsDragging then
-                local MaxTilt = 9.0
-                TargetBtnTilt = math.clamp(BtnVelocityX * 0.0075, -MaxTilt, MaxTilt)
-            else
-                TargetBtnTilt = 0
-            end
-
-            local TiltRate = IsDragging and 20 or 24
-            local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
-            CurrentBtnTilt = CurrentBtnTilt + (TargetBtnTilt - CurrentBtnTilt) * TiltAlpha
-
             Button.Position = UDim2.fromOffset(CurrentButtonPos.X, CurrentButtonPos.Y)
-            Button.Rotation = CurrentBtnTilt
+            Button.Rotation = 0
 
             if not IsDragging then
                 local Dist = (CurrentButtonPos - TargetButtonPos).Magnitude
-                if Dist < 0.5 and math.abs(CurrentBtnTilt) < 0.05 then
+                if Dist < 0.25 then
                     ResetDragVisual()
                 end
             end
@@ -3599,11 +3486,8 @@ function Library:AddDraggableButton(...)
                         Button.AnchorPoint = Vector2.new(0.5, 0.5)
                         CurrentButtonPos = Center
                         TargetButtonPos = Center
-                        PrevTargetBtnX = Center.X
-                        BtnVelocityX = 0
-                        CurrentBtnTilt = 0
-                        TargetBtnTilt = 0
                         Button.Position = UDim2.fromOffset(Center.X, Center.Y)
+                        Button.Rotation = 0
                         IsDragging = true
 
                         if OutlineStroke then
@@ -11156,6 +11040,7 @@ function Library:CreateWindow(WindowInfo)
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
     local WindowScale
+    local SavedWindowPosition = nil
     local ActiveToggleTweens = {}
     local ActiveCloseTweenId = 0
     local DividerLine
@@ -11260,7 +11145,7 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
-        Library.SavedWindowPosition = MainFrame.Position
+        SavedWindowPosition = MainFrame.Position
 
         --// Top Bar \\-
         TopBar = New("Frame", {
@@ -11461,14 +11346,12 @@ function Library:CreateWindow(WindowInfo)
             end,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
-            ZIndex = 10,
             Parent = MainFrame
         })
         Library:MakeLine(MainFrame, {
             AnchorPoint = Vector2.new(0, 1),
             Position = UDim2.new(0, 0, 1, -20),
             Size = UDim2.new(1, 0, 0, 1),
-            ZIndex = 11,
         })
 
         local BottomBar = New("Frame", {
@@ -11476,7 +11359,6 @@ function Library:CreateWindow(WindowInfo)
             BackgroundTransparency = 1,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20),
-            ZIndex = 12,
             Parent = MainFrame,
         })
         table.insert(
@@ -11558,7 +11440,6 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             BorderSizePixel = 0,
-            ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
@@ -11572,7 +11453,6 @@ function Library:CreateWindow(WindowInfo)
             Parent = Container,
         })
 
-        Library.WindowTabsFrame = Tabs
         Library.WindowContainer = Container
     end
 
@@ -11981,7 +11861,6 @@ function Library:CreateWindow(WindowInfo)
             --// Tab Container \\--
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
-                ClipsDescendants = true,
                 Position = UDim2.fromScale(0, 0),
                 Size = UDim2.fromScale(1, 1),
                 Visible = false,
@@ -11992,7 +11871,6 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
-                ClipsDescendants = true,
                 ScrollBarImageTransparency = 1,
                 ScrollBarThickness = 0,
                 Size = UDim2.new(0.5, -3, 1, 0),
@@ -12027,7 +11905,6 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
-                ClipsDescendants = true,
                 Position = UDim2.fromScale(1, 0),
                 ScrollBarImageTransparency = 1,
                 ScrollBarThickness = 0,
@@ -12710,7 +12587,6 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
-                    ClipsDescendants = true,
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
@@ -12822,7 +12698,6 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = 1,
                     BorderSizePixel = 0,
                     CanvasSize = UDim2.fromScale(0, 0),
-                    ClipsDescendants = true,
                     LayoutOrder = 2,
                     ScrollBarThickness = 0,
                     Size = UDim2.fromScale(1, 0),
@@ -12877,18 +12752,20 @@ function Library:CreateWindow(WindowInfo)
                 local TopSize = math.max(TopMeasured, TopMin)
 
                 local ContentMeasured = GroupboxList.AbsoluteContentSize.Y / Library.DPIScale
-                local EstimatedContent = 0
-                local VisibleCount = 0
-                for _, Child in GroupboxContainer:GetChildren() do
-                    if Child:IsA("GuiObject") and Child.Visible ~= false then
-                        EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
-                        VisibleCount = VisibleCount + 1
+                if ContentMeasured <= 0 then
+                    local EstimatedContent = 0
+                    local VisibleCount = 0
+                    for _, Child in GroupboxContainer:GetChildren() do
+                        if Child:IsA("GuiObject") and Child.Visible ~= false then
+                            EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
+                            VisibleCount = VisibleCount + 1
+                        end
                     end
+                    if VisibleCount > 0 then
+                        EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
+                    end
+                    ContentMeasured = math.max(ContentMeasured, EstimatedContent)
                 end
-                if VisibleCount > 0 then
-                    EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
-                end
-                ContentMeasured = math.max(ContentMeasured, EstimatedContent)
 
                 local ContainerSize = ContentMeasured + 14
                 if Groupbox.PoppedOut then
@@ -13438,7 +13315,6 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
-                ClipsDescendants = true,
                 ScrollBarThickness = 0,
                 Position = UDim2.fromScale(0, 0),
                 Size = UDim2.fromScale(1, 1),
@@ -14232,6 +14108,10 @@ function Library:CreateWindow(WindowInfo)
             Library.Toggled = not Library.Toggled
         end
 
+        if PriorToggled and not Library.Toggled and MainFrame then
+            SavedWindowPosition = MainFrame.Position
+        end
+
         local BaseScale = GetBaseScale()
         if WindowScale then
             WindowScale.Scale = BaseScale
@@ -14246,21 +14126,19 @@ function Library:CreateWindow(WindowInfo)
             end
             table.clear(ActiveToggleTweens)
 
-            if not Library.SavedWindowPosition then
-                Library.SavedWindowPosition = MainFrame.Position
-            end
-            local TargetPos = Library.SavedWindowPosition
+            local TargetPos = SavedWindowPosition or MainFrame.Position
+            SavedWindowPosition = TargetPos
 
             if Library.Toggled then
-                if not MainFrame.Visible then
-                    MainFrame.Position = UDim2.new(
-                        TargetPos.X.Scale,
-                        TargetPos.X.Offset,
-                        TargetPos.Y.Scale,
-                        TargetPos.Y.Offset + 10
-                    )
-                    MainFrame.Visible = true
-                end
+                local StartPos = UDim2.new(
+                    TargetPos.X.Scale,
+                    TargetPos.X.Offset,
+                    TargetPos.Y.Scale,
+                    TargetPos.Y.Offset + 10
+                )
+
+                MainFrame.Position = StartPos
+                MainFrame.Visible = true
 
                 local OpenTween = TweenService:Create(
                     MainFrame,
@@ -14297,8 +14175,8 @@ function Library:CreateWindow(WindowInfo)
             end
         else
             MainFrame.Visible = Library.Toggled
-            if Library.SavedWindowPosition then
-                MainFrame.Position = Library.SavedWindowPosition
+            if SavedWindowPosition then
+                MainFrame.Position = SavedWindowPosition
             end
         end
 
@@ -15347,14 +15225,10 @@ function Library:Unload()
     table.clear(ActiveTabTweens)
 
     Library.Toggle = function(...) end
-    Library:RestoreDragCulling()
-    table.clear(DragCulledObjects)
     Library.ScreenGui = nil
     Library.Floats = nil
     Library.Overlay = nil
     Library.WindowContainer = nil
-    Library.WindowTabsFrame = nil
-    Library.SavedWindowPosition = nil
     Library.KeybindFrame = nil
     Library.KeybindContainer = nil
 
