@@ -2213,12 +2213,6 @@ function Library:MakeDraggable(
         Dragging = false
         HideSnapGuides()
 
-        if IsMainWindow and FramePos and TargetPos then
-            local BaseScaleX = FramePos.X.Scale
-            local BaseScaleY = FramePos.Y.Scale
-            SavedWindowPosition = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
-        end
-
         if MoveConnection then
             MoveConnection:Disconnect()
             MoveConnection = nil
@@ -14107,6 +14101,7 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
+        local PriorToggled = Library.Toggled
         if typeof(Value) == "boolean" then
             Library.Toggled = Value
         else
@@ -14151,6 +14146,12 @@ function Library:CreateWindow(WindowInfo)
                 )
                 table.insert(ActiveToggleTweens, OpenTween)
                 OpenTween:Play()
+
+                OpenTween.Completed:Once(function()
+                    if Library.Toggled then
+                        MainFrame.Position = TargetPos
+                    end
+                end)
             else
                 local EndPos = UDim2.new(
                     TargetPos.X.Scale,
