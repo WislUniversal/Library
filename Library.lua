@@ -2166,31 +2166,31 @@ function Library:ApplyDragCulling()
         end
     end
 
-    if Library.WindowTabsFrame then
-        CullScrollingFrame(Library.WindowTabsFrame)
-    end
-
-    if Library.ActiveTab and typeof(Library.ActiveTab) == "table" and Library.ActiveTab.Sides then
-        for _, Side in Library.ActiveTab.Sides do
-            CullScrollingFrame(Side)
-        end
-    elseif Library.Tabs then
-        for _, Tab in Library.Tabs do
-            if typeof(Tab) == "table" and Tab.Sides and Tab.Container and Tab.Container.Visible then
-                for _, Side in Tab.Sides do
-                    CullScrollingFrame(Side)
+    pcall(function()
+        if Library.ActiveTab and typeof(Library.ActiveTab) == "table" and Library.ActiveTab.Sides then
+            for _, Side in Library.ActiveTab.Sides do
+                CullScrollingFrame(Side)
+            end
+        elseif Library.Tabs then
+            for _, Tab in Library.Tabs do
+                if typeof(Tab) == "table" and Tab.Sides and Tab.Container and Tab.Container.Visible then
+                    for _, Side in Tab.Sides do
+                        CullScrollingFrame(Side)
+                    end
                 end
             end
         end
-    end
+    end)
 end
 
 function Library:RestoreDragCulling()
     if #DragCulledObjects > 0 then
         for _, obj in DragCulledObjects do
-            if obj and obj.Parent then
-                obj.Visible = true
-            end
+            pcall(function()
+                if obj and obj.Parent then
+                    obj.Visible = true
+                end
+            end)
         end
         table.clear(DragCulledObjects)
     end
@@ -2213,6 +2213,9 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
+    local CurrentTilt = 0
+    local TargetTilt = 0
+    local LastAppliedTilt = 0
 
     local CachedViewportSize = Vector2.new(1920, 1080)
     local CachedElemSize = Vector2.new(600, 400)
@@ -2273,6 +2276,7 @@ function Library:MakeDraggable(
 
         if IsMainWindow and FramePos then
             Library.SavedWindowPosition = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
+            Library:RestoreDragCulling()
         end
 
         if MoveConnection then
@@ -2292,10 +2296,14 @@ function Library:MakeDraggable(
                 PhysicsConnection = nil
             end
             UI.Rotation = 0
+            CurrentTilt = 0
+            TargetTilt = 0
+            LastAppliedTilt = 0
             if FramePos then
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
                     Library.SavedWindowPosition = UI.Position
+                    Library:RestoreDragCulling()
                 end
             end
         end
@@ -2309,7 +2317,7 @@ function Library:MakeDraggable(
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
 
-            local FollowRate = Dragging and 32 or 24
+            local FollowRate = Dragging and 30 or 24
             local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
 
@@ -2317,15 +2325,44 @@ function Library:MakeDraggable(
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
 
             UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
-            UI.Rotation = 0
+
+            if IsMainWindow then
+                local LagX = TargetPos.X - CurrentPos.X
+                local MaxTilt = 2.4
+                if Dragging then
+                    TargetTilt = math.clamp(LagX * 0.045, -MaxTilt, MaxTilt)
+                else
+                    TargetTilt = 0
+                end
+
+                local TiltRate = Dragging and 18 or 24
+                local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
+                CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * TiltAlpha
+
+                local AppliedTilt = 0
+                if math.abs(CurrentTilt) > 0.08 then
+                    AppliedTilt = math.round(CurrentTilt * 10) / 10
+                end
+
+                if AppliedTilt ~= LastAppliedTilt then
+                    LastAppliedTilt = AppliedTilt
+                    UI.Rotation = AppliedTilt
+                end
+            end
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                if Dist < 0.5 then
+                local TiltSettled = not IsMainWindow or (math.abs(CurrentTilt) < 0.05)
+
+                if Dist < 0.5 and TiltSettled then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     UI.Rotation = 0
+                    CurrentTilt = 0
+                    TargetTilt = 0
+                    LastAppliedTilt = 0
                     if IsMainWindow then
                         Library.SavedWindowPosition = UI.Position
+                        Library:RestoreDragCulling()
                     end
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
@@ -2346,7 +2383,14 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
+        CurrentTilt = 0
+        TargetTilt = 0
+        LastAppliedTilt = 0
         UI.Rotation = 0
+
+        if IsMainWindow then
+            Library:ApplyDragCulling()
+        end
 
         local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
         CachedViewportSize = ViewportSize
