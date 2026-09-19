@@ -409,6 +409,7 @@ local Templates = {
         MobileButtonsOffset = UDim2.fromOffset(56, 28),
         ToggleIcon = "rbxassetid://81779667323093",
         ToggleIconSize = UDim2.fromOffset(50, 50),
+        ToggleIconScale = 0.88,
         ToggleBackgroundColor = "BackgroundColor",
         ToggleIconColor = "FontColor",
 
@@ -436,6 +437,7 @@ local Templates = {
         ProfileName = nil,
         ProfileUsername = nil,
         ProfileIcon = nil,
+        CensorProfile = true,
 
         --// Animations \\--
         Animations = {
@@ -3261,6 +3263,7 @@ function Library:AddDraggableButton(...)
     local BackgroundColor3
     local IconColor
     local GradientColors
+    local IconScale
 
     if typeof(Params) == "table" then
         Text = Params.Text
@@ -3273,6 +3276,7 @@ function Library:AddDraggableButton(...)
         BackgroundColor3 = Params.BackgroundColor3
         IconColor = Params.IconColor
         GradientColors = Params.GradientColors
+        IconScale = Params.IconScale or Params.ImageScale
     elseif typeof(Params) == "string" then
         Text = Params
         Func = select(2, ...)
@@ -3322,6 +3326,12 @@ function Library:AddDraggableButton(...)
 
     local IconLabel
     if Icon then
+        local ResolvedIconScale = if typeof(IconScale) == "number"
+            then UDim2.fromScale(IconScale, IconScale)
+            elseif typeof(IconScale) == "UDim2"
+            then IconScale
+            else UDim2.fromScale(0.88, 0.88)
+
         IconLabel = New("ImageLabel", {
             Active = false,
             Selectable = false,
@@ -3330,7 +3340,7 @@ function Library:AddDraggableButton(...)
             Image = Icon,
             ImageColor3 = IconColor or "FontColor",
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromScale(0.68, 0.68),
+            Size = ResolvedIconScale,
             ScaleType = Enum.ScaleType.Fit,
             ZIndex = 2,
             Parent = Button,
@@ -3537,6 +3547,16 @@ function Library:AddDraggableButton(...)
         end
         if DraggableButton.IconLabel then
             DraggableButton.IconLabel.Image = tostring(NewIcon)
+        end
+    end
+
+    function DraggableButton:SetIconScale(NewScale: number | UDim2)
+        if DraggableButton.IconLabel then
+            DraggableButton.IconLabel.Size = if typeof(NewScale) == "number"
+                then UDim2.fromScale(NewScale, NewScale)
+                elseif typeof(NewScale) == "UDim2"
+                then NewScale
+                else UDim2.fromScale(0.88, 0.88)
         end
     end
 
@@ -11081,6 +11101,12 @@ function Library:CreateWindow(WindowInfo)
     local ProfileTextHolder
     local ProfileDisplayName
     local ProfileUsername
+    local ProfileTrigger
+    local RealDisplayName = ""
+    local RealUsername = ""
+    local IsProfileCensored = WindowInfo.CensorProfile ~= false
+    local IsProfileHovered = false
+    local UpdateProfileDisplay
     local ProfileHeight = 50
     local HasProfile = WindowInfo.ShowProfile ~= false
     local TabsBottomOffset = HasProfile and (49 + ProfileHeight + 1) or 49
@@ -11401,95 +11427,19 @@ function Library:CreateWindow(WindowInfo)
 
         --// Resize Button \\--
         if WindowInfo.Resizable then
-            local CornerOffset = math.max(2, math.floor(WindowInfo.CornerRadius * 0.35))
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 1),
-                AutoButtonColor = false,
-                BackgroundColor3 = "AccentColor",
                 BackgroundTransparency = 1,
-                Position = UDim2.new(1, -CornerOffset, 1, -CornerOffset),
+                Position = UDim2.new(1, 0, 1, 0),
                 Size = UDim2.fromOffset(20, 20),
                 Text = "",
-                ZIndex = 8,
+                ZIndex = 5,
                 Parent = MainFrame,
             })
-
-            table.insert(
-                Library.Corners,
-                New("UICorner", {
-                    CornerRadius = UDim.new(0, 4),
-                    Parent = ResizeButton,
-                })
-            )
-
-            local WindowResizeIcon = New("ImageLabel", {
-                AnchorPoint = Vector2.new(1, 1),
-                BackgroundTransparency = 1,
-                ImageColor3 = function()
-                    return Library:GetDarkerColor(Library.Scheme.FontColor)
-                end,
-                ImageTransparency = 0.65,
-                Position = UDim2.new(1, -2, 1, -2),
-                Size = UDim2.fromOffset(12, 12),
-                ZIndex = 9,
-                Parent = ResizeButton,
-            })
-            if ResizeIcon then
-                Library:ApplyLucideIcon(WindowResizeIcon, ResizeIcon)
-            end
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
                 for _, Tab in Library.Tabs do
                     Tab:Resize(true)
-                end
-            end)
-
-            local IsHovered = false
-            local IsResizing = false
-
-            local function UpdateResizeVisual()
-                local TargetImageTransparency = (IsHovered or IsResizing) and 0 or 0.65
-                local TargetBackgroundTransparency = if IsResizing then 0.8 elseif IsHovered then 0.9 else 1
-                local TargetColor = (IsHovered or IsResizing) and Library.Scheme.AccentColor or Library:GetDarkerColor(Library.Scheme.FontColor)
-
-                TweenService:Create(WindowResizeIcon, Library.TweenInfo, {
-                    ImageTransparency = TargetImageTransparency,
-                    ImageColor3 = TargetColor,
-                }):Play()
-
-                TweenService:Create(ResizeButton, Library.TweenInfo, {
-                    BackgroundTransparency = TargetBackgroundTransparency,
-                }):Play()
-            end
-
-            ResizeButton.MouseEnter:Connect(function()
-                IsHovered = true
-                UpdateResizeVisual()
-            end)
-
-            ResizeButton.MouseLeave:Connect(function()
-                IsHovered = false
-                if not IsResizing then
-                    UpdateResizeVisual()
-                end
-            end)
-
-            ResizeButton.InputBegan:Connect(function(Input: InputObject)
-                if IsClickInput(Input) then
-                    IsResizing = true
-                    UpdateResizeVisual()
-
-                    local EndConnection
-                    EndConnection = Input.Changed:Connect(function()
-                        if Input.UserInputState == Enum.UserInputState.End then
-                            if EndConnection then
-                                EndConnection:Disconnect()
-                                EndConnection = nil
-                            end
-                            IsResizing = false
-                            UpdateResizeVisual()
-                        end
-                    end)
                 end
             end)
         end
@@ -11578,11 +11528,14 @@ function Library:CreateWindow(WindowInfo)
                 Parent = ProfileTextHolder,
             })
 
+            RealDisplayName = PlayerDisplayName
+            RealUsername = if PlayerName:sub(1, 1) == "@" then PlayerName else ("@" .. PlayerName)
+
             ProfileDisplayName = New("TextLabel", {
                 BackgroundTransparency = 1,
                 FontFace = "Font",
                 Size = UDim2.new(1, 0, 0, 16),
-                Text = PlayerDisplayName,
+                Text = RealDisplayName,
                 TextColor3 = "FontColor",
                 TextSize = 14,
                 TextTruncate = Enum.TextTruncate.AtEnd,
@@ -11590,12 +11543,11 @@ function Library:CreateWindow(WindowInfo)
                 Parent = ProfileTextHolder,
             })
 
-            local FormattedUsername = if PlayerName:sub(1, 1) == "@" then PlayerName else ("@" .. PlayerName)
             ProfileUsername = New("TextLabel", {
                 BackgroundTransparency = 1,
                 FontFace = "Font",
                 Size = UDim2.new(1, 0, 0, 14),
-                Text = FormattedUsername,
+                Text = RealUsername,
                 TextColor3 = function()
                     return Library:GetDarkerColor(Library.Scheme.FontColor)
                 end,
@@ -11604,6 +11556,56 @@ function Library:CreateWindow(WindowInfo)
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = ProfileTextHolder,
             })
+
+            UpdateProfileDisplay = function()
+                if not ProfileDisplayName or not ProfileUsername then
+                    return
+                end
+
+                local ShouldCensor = IsProfileCensored and not IsProfileHovered
+                if ShouldCensor then
+                    local DisplayMaskCount = math.clamp(utf8.len(RealDisplayName) or #RealDisplayName, 5, 12)
+                    ProfileDisplayName.Text = string.rep("•", DisplayMaskCount)
+
+                    local UsernameClean = RealUsername:gsub("^@", "")
+                    local UsernameMaskCount = math.clamp(utf8.len(UsernameClean) or #UsernameClean, 5, 12)
+                    ProfileUsername.Text = "@" .. string.rep("•", UsernameMaskCount)
+                    return
+                end
+
+                ProfileDisplayName.Text = RealDisplayName
+                ProfileUsername.Text = RealUsername
+            end
+
+            UpdateProfileDisplay()
+
+            ProfileTrigger = New("TextButton", {
+                Active = true,
+                AutoButtonColor = false,
+                BackgroundTransparency = 1,
+                Position = UDim2.fromScale(0, 0),
+                Size = UDim2.fromScale(1, 1),
+                Text = "",
+                ZIndex = 4,
+                Parent = ProfileHolder,
+            })
+
+            ProfileTrigger.MouseEnter:Connect(function()
+                IsProfileHovered = true
+                UpdateProfileDisplay()
+            end)
+
+            ProfileTrigger.MouseLeave:Connect(function()
+                IsProfileHovered = false
+                UpdateProfileDisplay()
+            end)
+
+            ProfileTrigger.MouseButton1Click:Connect(function()
+                if Library.IsMobile then
+                    IsProfileHovered = not IsProfileHovered
+                    UpdateProfileDisplay()
+                end
+            end)
 
             if IsCompact then
                 ProfileTextHolder.Visible = false
@@ -11754,12 +11756,19 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if ProfileConfig.Name or ProfileConfig.DisplayName then
-            ProfileDisplayName.Text = tostring(ProfileConfig.Name or ProfileConfig.DisplayName)
+            RealDisplayName = tostring(ProfileConfig.Name or ProfileConfig.DisplayName)
         end
         if ProfileConfig.Username then
             local RawUsername = tostring(ProfileConfig.Username)
-            ProfileUsername.Text = if RawUsername:sub(1, 1) == "@" then RawUsername else ("@" .. RawUsername)
+            RealUsername = if RawUsername:sub(1, 1) == "@" then RawUsername else ("@" .. RawUsername)
         end
+        if ProfileConfig.Censor ~= nil then
+            IsProfileCensored = ProfileConfig.Censor == true
+        end
+        if UpdateProfileDisplay then
+            UpdateProfileDisplay()
+        end
+
         if ProfileConfig.Icon then
             local CustomIcon = Library:GetCustomIcon(ProfileConfig.Icon)
             if CustomIcon then
@@ -11776,6 +11785,13 @@ function Library:CreateWindow(WindowInfo)
             end
             TabsBottomOffset = if HasProfile then (49 + ProfileHeight + 1) else 49
             Tabs.Size = UDim2.new(0, Window:GetSidebarWidth(), 1, -TabsBottomOffset)
+        end
+    end
+
+    function Window:SetCensorProfile(State: boolean)
+        IsProfileCensored = State == true
+        if UpdateProfileDisplay then
+            UpdateProfileDisplay()
         end
     end
 
@@ -11831,7 +11847,7 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.CornerRadius = Radius
 
         if ResizeButton then
-            ResizeButton.Position = UDim2.new(1, -math.max(2, math.floor(Radius * 0.35)), 1, -math.max(2, math.floor(Radius * 0.35)))
+            ResizeButton.Position = UDim2.new(1, 0, 1, 0)
         end
 
         for _, Menu in Library.ContextMenus do
@@ -14592,6 +14608,7 @@ function Library:CreateWindow(WindowInfo)
             ToggleButton = Library:AddDraggableButton({
                 Icon = WindowInfo.ToggleIcon,
                 Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(50, 50),
+                IconScale = WindowInfo.ToggleIconScale or 0.88,
                 BackgroundColor3 = WindowInfo.ToggleBackgroundColor or "BackgroundColor",
                 IconColor = WindowInfo.ToggleIconColor or "FontColor",
                 Func = function()
