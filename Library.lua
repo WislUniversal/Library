@@ -2156,12 +2156,16 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
-    local PrevTargetPos = Vector2.new(0, 0)
-    local WindowVelocity = Vector2.new(0, 0)
+    local PrevTargetX = 0
+    local WindowVelocityX = 0
+    local CurrentTilt = 0
+    local TargetTilt = 0
 
-    local DragScale: UIScale? = nil
-    local BaseScaleValue = 1
-    local WindowOutlineStroke: UIStroke? = nil
+    local CachedViewportSize = Vector2.new(1920, 1080)
+    local CachedElemSize = Vector2.new(600, 400)
+    local CachedTargetsX: { [string]: number }? = nil
+    local CachedTargetsY: { [string]: number }? = nil
+    local CachedDistance = 28
 
     local SnapGuideX, SnapGuideY
 
@@ -2204,57 +2208,23 @@ function Library:MakeDraggable(
         end
     end
 
-    local function GetWindowScale(): UIScale?
-        if DragScale and DragScale.Parent == UI then
-            return DragScale
-        end
-        DragScale = UI:FindFirstChildOfClass("UIScale")
-        if DragScale then
-            BaseScaleValue = DragScale.Scale
-        end
-        return DragScale
-    end
+    local MoveConnection: RBXScriptConnection? = nil
+    local EndConnection: RBXScriptConnection? = nil
 
-    local function GetWindowStroke(): UIStroke?
-        if WindowOutlineStroke and WindowOutlineStroke.Parent == UI then
-            return WindowOutlineStroke
+    local function EndDrag()
+        if not Dragging then
+            return
         end
-        for _, Child in UI:GetChildren() do
-            if Child:IsA("UIStroke") and Child.Name ~= "ShadowStroke" and Child.ZIndex >= 2 then
-                WindowOutlineStroke = Child
-                break
-            end
+        Dragging = false
+        HideSnapGuides()
+
+        if MoveConnection then
+            MoveConnection:Disconnect()
+            MoveConnection = nil
         end
-        return WindowOutlineStroke
-    end
-
-    local function ApplyDragVisuals(Active: boolean)
-        local ScaleObj = GetWindowScale()
-        local StrokeObj = GetWindowStroke()
-
-        if Active then
-            if StrokeObj then
-                TweenService:Create(StrokeObj, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Color = Library.Scheme.AccentColor
-                }):Play()
-            end
-            if ScaleObj then
-                local LiftScale = BaseScaleValue * (Library.IsMobile and 1.02 or 1.015)
-                TweenService:Create(ScaleObj, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Scale = LiftScale
-                }):Play()
-            end
-        else
-            if StrokeObj then
-                TweenService:Create(StrokeObj, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Color = Library.Scheme.OutlineColor
-                }):Play()
-            end
-            if ScaleObj then
-                TweenService:Create(ScaleObj, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Scale = BaseScaleValue
-                }):Play()
-            end
+        if EndConnection then
+            EndConnection:Disconnect()
+            EndConnection = nil
         end
     end
 
@@ -2264,7 +2234,7 @@ function Library:MakeDraggable(
                 PhysicsConnection:Disconnect()
                 PhysicsConnection = nil
             end
-            ApplyDragVisuals(false)
+            UI.Rotation = 0
             if FramePos then
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
@@ -2281,27 +2251,41 @@ function Library:MakeDraggable(
 
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
-            local FollowRate = Dragging and 22 or 16
-            local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
-            CurrentPos = CurrentPos:Lerp(TargetPos, FollowAlpha)
 
-            local InstantVel = (TargetPos - PrevTargetPos) / dtClamped
-            PrevTargetPos = TargetPos
-            WindowVelocity = WindowVelocity:Lerp(InstantVel, math.clamp(16 * dtClamped, 0, 1))
+            local FollowRate = Dragging and 28 or 22
+            local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
+            CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
+
+            local InstantVelX = (TargetPos.X - PrevTargetX) / dtClamped
+            PrevTargetX = TargetPos.X
+            local VelAlpha = 1 - math.exp(-14 * dtClamped)
+            WindowVelocityX = WindowVelocityX + (InstantVelX - WindowVelocityX) * VelAlpha
+
+            if Dragging then
+                local MaxTilt = 6.0
+                TargetTilt = math.clamp(WindowVelocityX * 0.006, -MaxTilt, MaxTilt)
+            else
+                TargetTilt = 0
+            end
+
+            local TiltRate = Dragging and 20 or 24
+            local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
+            CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * TiltAlpha
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
 
-            UI.Position = UDim2.new(BaseScaleX, CurrentPos.X, BaseScaleY, CurrentPos.Y)
+            UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
+            UI.Rotation = CurrentTilt
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                if Dist < 0.4 then
+                if Dist < 0.5 and math.abs(CurrentTilt) < 0.04 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
+                    UI.Rotation = 0
                     if IsMainWindow then
                         SavedWindowPosition = UI.Position
                     end
-                    ApplyDragVisuals(false)
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
                         PhysicsConnection = nil
@@ -2312,7 +2296,7 @@ function Library:MakeDraggable(
     end
 
     InputBegan = DragFrame.InputBegan:Connect(function(Input: InputObject)
-        if not IsClickInput(Input) or IsMainWindow and Library.CantDragForced then
+        if not IsClickInput(Input) or (IsMainWindow and Library.CantDragForced) then
             return
         end
 
@@ -2321,109 +2305,87 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
-        PrevTargetPos = CurrentPos
-        WindowVelocity = Vector2.new(0, 0)
+        PrevTargetX = CurrentPos.X
+        WindowVelocityX = 0
+        CurrentTilt = 0
+        TargetTilt = 0
+
+        local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+        CachedViewportSize = ViewportSize
+        CachedElemSize = UI.AbsoluteSize
+
+        if SnapConfig and SnapConfig.Enabled then
+            CachedDistance = SnapConfig.Distance or 28
+            local Margin = SnapConfig.Margin or 8
+            CachedTargetsX, CachedTargetsY = GetSnapEdges(CachedElemSize, CachedViewportSize, Margin, SnapConfig.AvoidCoreGui ~= false)
+        else
+            CachedTargetsX, CachedTargetsY = nil, nil
+        end
 
         Dragging = true
-        ApplyDragVisuals(true)
         StartPhysicsLoop()
 
-        Changed = Input.Changed:Connect(function()
-            if Input.UserInputState ~= Enum.UserInputState.End then
+        if MoveConnection then
+            MoveConnection:Disconnect()
+            MoveConnection = nil
+        end
+        if EndConnection then
+            EndConnection:Disconnect()
+            EndConnection = nil
+        end
+
+        MoveConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+            if not Dragging or not IsHoverInput(MoveInput) or not StartPos or not FramePos then
+                return
+            end
+            if (not IgnoreToggled and not Library.Toggled) or (IsMainWindow and Library.CantDragForced) or not (ScreenGui and ScreenGui.Parent) then
+                EndDrag()
+                StopPhysics(true)
                 return
             end
 
-            Dragging = false
-            HideSnapGuides()
-
-            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local Fling = WindowVelocity * 0.05
-            local MaxX = ViewportSize.X - (UI.AbsoluteSize.X * 0.15)
-            local MinX = -(UI.AbsoluteSize.X * 0.85)
-            local MaxY = ViewportSize.Y - (UI.AbsoluteSize.Y * 0.15)
-            local MinY = 0
-
-            local BaseScaleX = FramePos and FramePos.X.Scale or 0
-            local BaseScaleY = FramePos and FramePos.Y.Scale or 0
-
-            local TargetAbsX = BaseScaleX * ViewportSize.X + TargetPos.X + Fling.X
-            local TargetAbsY = BaseScaleY * ViewportSize.Y + TargetPos.Y + Fling.Y
-
-            local ClampedAbsX = math.clamp(TargetAbsX, MinX, MaxX)
-            local ClampedAbsY = math.clamp(TargetAbsY, MinY, MaxY)
-
-            TargetPos = Vector2.new(
-                ClampedAbsX - (BaseScaleX * ViewportSize.X),
-                ClampedAbsY - (BaseScaleY * ViewportSize.Y)
-            )
-
-            if Changed and Changed.Connected then
-                Changed:Disconnect()
-                Changed = nil
-            end
-        end)
-    end)
-
-    InputChanged = UserInputService.InputChanged:Connect(function(Input: InputObject)
-        if
-            (not IgnoreToggled and not Library.Toggled)
-            or (IsMainWindow and Library.CantDragForced)
-            or not (ScreenGui and ScreenGui.Parent)
-        then
-            Dragging = false
-            HideSnapGuides()
-            StopPhysics(true)
-
-            if Changed and Changed.Connected then
-                Changed:Disconnect()
-                Changed = nil
-            end
-
-            return
-        end
-
-        if Dragging and IsHoverInput(Input) and StartPos and FramePos then
-            local Delta = Input.Position - StartPos
+            local Delta = MoveInput.Position - StartPos
             local NewX = FramePos.X.Offset + Delta.X
             local NewY = FramePos.Y.Offset + Delta.Y
 
-            if SnapConfig and SnapConfig.Enabled then
-                local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-                local Distance = SnapConfig.Distance or 28
-                local Margin = SnapConfig.Margin or 8
+            if CachedTargetsX and CachedTargetsY then
+                local BaseScaleX = FramePos.X.Scale
+                local BaseScaleY = FramePos.Y.Scale
+                local AbsX = BaseScaleX * CachedViewportSize.X + NewX
+                local AbsY = BaseScaleY * CachedViewportSize.Y + NewY
 
-                local AbsX = FramePos.X.Scale * ViewportSize.X + NewX
-                local AbsY = FramePos.Y.Scale * ViewportSize.Y + NewY
-                local ElemSize = UI.AbsoluteSize
-
-                local TargetsX, TargetsY = GetSnapEdges(ElemSize, ViewportSize, Margin, SnapConfig.AvoidCoreGui ~= false)
-                local SnappedX, SnappedXName = GetClosestSnapTarget(AbsX, TargetsX, Distance)
-                local SnappedY, SnappedYName = GetClosestSnapTarget(AbsY, TargetsY, Distance)
+                local SnappedX, SnappedXName = GetClosestSnapTarget(AbsX, CachedTargetsX, CachedDistance)
+                local SnappedY, SnappedYName = GetClosestSnapTarget(AbsY, CachedTargetsY, CachedDistance)
 
                 if SnappedX then
-                    NewX = SnappedX - FramePos.X.Scale * ViewportSize.X
+                    NewX = SnappedX - BaseScaleX * CachedViewportSize.X
                 end
                 if SnappedY then
-                    NewY = SnappedY - FramePos.Y.Scale * ViewportSize.Y
+                    NewY = SnappedY - BaseScaleY * CachedViewportSize.Y
                 end
 
                 local GuideX, GuideY = GetSnapGuides()
                 GuideX.Visible = SnappedX ~= nil
                 if SnappedX then
-                    GuideX.Position = UDim2.fromOffset(GetSnapGuideOffset(SnappedXName, SnappedX, ElemSize.X), 0)
+                    GuideX.Position = UDim2.fromOffset(GetSnapGuideOffset(SnappedXName, SnappedX, CachedElemSize.X), 0)
                 end
 
                 GuideY.Visible = SnappedY ~= nil
                 if SnappedY then
-                    GuideY.Position = UDim2.fromOffset(0, GetSnapGuideOffset(SnappedYName, SnappedY, ElemSize.Y))
+                    GuideY.Position = UDim2.fromOffset(0, GetSnapGuideOffset(SnappedYName, SnappedY, CachedElemSize.Y))
                 end
             end
 
             TargetPos = Vector2.new(NewX, NewY)
-        end
+        end)
+
+        EndConnection = UserInputService.InputEnded:Connect(function(EndInput: InputObject)
+            if EndInput == Input or EndInput.UserInputType == Enum.UserInputType.MouseButton1 or EndInput.UserInputType == Enum.UserInputType.Touch then
+                EndDrag()
+            end
+        end)
     end)
 
-    Library:GiveSignal(InputChanged)
     Library:GiveSignal(InputBegan)
 
     UI.Destroying:Once(function()
@@ -2432,16 +2394,18 @@ function Library:MakeDraggable(
             PhysicsConnection = nil
         end
 
-        if InputChanged and InputChanged.Connected then
-            InputChanged:Disconnect()
+        if MoveConnection and MoveConnection.Connected then
+            MoveConnection:Disconnect()
+            MoveConnection = nil
+        end
+
+        if EndConnection and EndConnection.Connected then
+            EndConnection:Disconnect()
+            EndConnection = nil
         end
 
         if InputBegan and InputBegan.Connected then
             InputBegan:Disconnect()
-        end
-
-        if Changed and Changed.Connected then
-            Changed:Disconnect()
         end
 
         if SnapGuideX then
@@ -2449,11 +2413,6 @@ function Library:MakeDraggable(
         end
         if SnapGuideY then
             SnapGuideY:Destroy()
-        end
-
-        local IdxChanged = table.find(Library.Signals, InputChanged)
-        if IdxChanged then
-            table.remove(Library.Signals, IdxChanged)
         end
 
         local IdxBegan = table.find(Library.Signals, InputBegan)
@@ -3337,6 +3296,7 @@ function Library:AddDraggableButton(...)
 
     local Button = New("TextButton", {
         Active = true,
+        AutoButtonColor = false,
         BackgroundColor3 = BackgroundColor3 or "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
         Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
@@ -3396,22 +3356,23 @@ function Library:AddDraggableButton(...)
     local BtnVelocityX = 0
     local CurrentBtnTilt = 0
     local TargetBtnTilt = 0
+    local SavedAnchorPoint: Vector2? = nil
+
+    local CachedHalfW = 25
+    local CachedHalfH = 25
+    local CachedViewport = Vector2.new(1920, 1080)
 
     local function ResetDragVisual()
         if OutlineStroke then
-            TweenService:Create(OutlineStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Color = Library.Scheme.OutlineColor
-            }):Play()
+            OutlineStroke.Color = Library.Scheme.OutlineColor
         end
-        TweenService:Create(Button, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = BaseSize
-        }):Play()
 
         Button.Rotation = 0
-        local HalfW = Button.AbsoluteSize.X * 0.5
-        local HalfH = Button.AbsoluteSize.Y * 0.5
-        Button.AnchorPoint = Vector2.new(0, 0)
-        Button.Position = UDim2.fromOffset(CurrentButtonPos.X - HalfW, CurrentButtonPos.Y - HalfH)
+        local OrigAnchor = SavedAnchorPoint or Vector2.new(0, 0)
+        Button.AnchorPoint = OrigAnchor
+        local FinalX = CurrentButtonPos.X - CachedHalfW + (OrigAnchor.X * CachedHalfW * 2)
+        local FinalY = CurrentButtonPos.Y - CachedHalfH + (OrigAnchor.Y * CachedHalfH * 2)
+        Button.Position = UDim2.fromOffset(math.round(FinalX), math.round(FinalY))
 
         if PhysicsConnection then
             PhysicsConnection:Disconnect()
@@ -3440,7 +3401,8 @@ function Library:AddDraggableButton(...)
 
             local InstantVelX = (TargetButtonPos.X - PrevTargetBtnX) / dtClamped
             PrevTargetBtnX = TargetButtonPos.X
-            BtnVelocityX = BtnVelocityX + (InstantVelX - BtnVelocityX) * math.clamp(16 * dtClamped, 0, 1)
+            local VelAlpha = 1 - math.exp(-16 * dtClamped)
+            BtnVelocityX = BtnVelocityX + (InstantVelX - BtnVelocityX) * VelAlpha
 
             if IsDragging then
                 local MaxTilt = 9.0
@@ -3450,14 +3412,15 @@ function Library:AddDraggableButton(...)
             end
 
             local TiltRate = IsDragging and 20 or 24
-            CurrentBtnTilt = CurrentBtnTilt + (TargetBtnTilt - CurrentBtnTilt) * math.clamp(TiltRate * dtClamped, 0, 1)
+            local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
+            CurrentBtnTilt = CurrentBtnTilt + (TargetBtnTilt - CurrentBtnTilt) * TiltAlpha
 
-            Button.Position = UDim2.fromOffset(CurrentButtonPos.X, CurrentButtonPos.Y)
+            Button.Position = UDim2.fromOffset(math.round(CurrentButtonPos.X), math.round(CurrentButtonPos.Y))
             Button.Rotation = CurrentBtnTilt
 
             if not IsDragging then
                 local Dist = (CurrentButtonPos - TargetButtonPos).Magnitude
-                if Dist < 0.4 and math.abs(CurrentBtnTilt) < 0.05 then
+                if Dist < 0.5 and math.abs(CurrentBtnTilt) < 0.05 then
                     ResetDragVisual()
                 end
             end
@@ -3483,12 +3446,16 @@ function Library:AddDraggableButton(...)
             if not ExcludeDragging and not Library.CantDragForced then
                 HoldThread = task.delay(0.28, function()
                     if ActiveInput and not IsDragging then
-                        local HalfW = Button.AbsoluteSize.X * 0.5
-                        local HalfH = Button.AbsoluteSize.Y * 0.5
-                        local Center = Button.AbsolutePosition + Vector2.new(HalfW, HalfH)
+                        CachedHalfW = Button.AbsoluteSize.X * 0.5
+                        CachedHalfH = Button.AbsoluteSize.Y * 0.5
+                        local Center = Button.AbsolutePosition + Vector2.new(CachedHalfW, CachedHalfH)
                         local CurInputPos = LatestInputPos or Vector2.new(Input.Position.X, Input.Position.Y)
                         DragOffset = Vector2.new(CurInputPos.X - Center.X, CurInputPos.Y - Center.Y)
 
+                        local Camera = workspace.CurrentCamera
+                        CachedViewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
+
+                        SavedAnchorPoint = Button.AnchorPoint
                         Button.AnchorPoint = Vector2.new(0.5, 0.5)
                         CurrentButtonPos = Center
                         TargetButtonPos = Center
@@ -3496,17 +3463,12 @@ function Library:AddDraggableButton(...)
                         BtnVelocityX = 0
                         CurrentBtnTilt = 0
                         TargetBtnTilt = 0
-                        Button.Position = UDim2.fromOffset(Center.X, Center.Y)
+                        Button.Position = UDim2.fromOffset(math.round(Center.X), math.round(Center.Y))
                         IsDragging = true
 
                         if OutlineStroke then
-                            TweenService:Create(OutlineStroke, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                Color = Library.Scheme.AccentColor
-                            }):Play()
+                            OutlineStroke.Color = Library.Scheme.AccentColor
                         end
-                        TweenService:Create(Button, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                            Size = UDim2.new(BaseSize.X.Scale, BaseSize.X.Offset + 6, BaseSize.Y.Scale, BaseSize.Y.Offset + 6)
-                        }):Play()
 
                         StartButtonPhysics()
                     end
@@ -3530,14 +3492,9 @@ function Library:AddDraggableButton(...)
                 local RawCenterX = InputPos.X - (DragOffset and DragOffset.X or 0)
                 local RawCenterY = InputPos.Y - (DragOffset and DragOffset.Y or 0)
 
-                local Camera = workspace.CurrentCamera
-                local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
-                local HalfW = Button.AbsoluteSize.X * 0.5
-                local HalfH = Button.AbsoluteSize.Y * 0.5
-
                 TargetButtonPos = Vector2.new(
-                    math.clamp(RawCenterX, HalfW, Viewport.X - HalfW),
-                    math.clamp(RawCenterY, HalfH, Viewport.Y - HalfH)
+                    math.clamp(RawCenterX, CachedHalfW, CachedViewport.X - CachedHalfW),
+                    math.clamp(RawCenterY, CachedHalfH, CachedViewport.Y - CachedHalfH)
                 )
             end
         end)
@@ -3553,7 +3510,6 @@ function Library:AddDraggableButton(...)
 
         if IsDragging then
             IsDragging = false
-            ResetDragVisual()
         else
             local Now = tick()
             if Now - LastClickTime >= 0.03 then
@@ -11146,6 +11102,7 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.Visible = false
 
         MainFrame = New("TextButton", {
+            AutoButtonColor = false,
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             end,
@@ -11523,12 +11480,12 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Container \\--
-        Container = New("Frame", {
+        Container = New("CanvasGroup", {
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
-            ClipsDescendants = true,
+            GroupTransparency = 0,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
