@@ -378,7 +378,7 @@ local Templates = {
 
         Position = UDim2.fromOffset(6, 6),
         Size = UDim2.fromOffset(930, 730),
-        IconSize = UDim2.fromOffset(36, 36),
+        IconSize = UDim2.fromOffset(40, 40),
 
         AutoShow = true,
         Center = true,
@@ -11214,11 +11214,15 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.Icon then
             local Icon = Library:GetCustomIcon(WindowInfo.Icon)
             WindowIcon = New("ImageLabel", {
+                BackgroundTransparency = 1,
+                ScaleType = Enum.ScaleType.Fit,
                 Size = WindowInfo.IconSize,
                 Parent = TitleHolder,
             })
             if Icon then
                 Library:ApplyLucideIcon(WindowIcon, Icon)
+            elseif typeof(WindowInfo.Icon) == "string" or typeof(WindowInfo.Icon) == "number" then
+                WindowIcon.Image = tostring(WindowInfo.Icon)
             end
         else
             WindowIcon = New("TextLabel", {
@@ -11251,10 +11255,10 @@ function Library:CreateWindow(WindowInfo)
         WindowTitle = New("TextLabel", {
             BackgroundTransparency = 1,
             FontFace = "Font",
-            Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24),
+            Size = UDim2.new(1, 0, 0, if HasValidFooter then 20 else 26),
             Text = WindowInfo.Title,
             TextColor3 = "FontColor",
-            TextSize = if HasValidFooter then 16 else 19,
+            TextSize = if HasValidFooter then 17 else 20,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = TitleTextHolder,
@@ -11263,12 +11267,12 @@ function Library:CreateWindow(WindowInfo)
         FooterLabel = New("TextLabel", {
             BackgroundTransparency = 1,
             FontFace = "Font",
-            Size = UDim2.new(1, 0, 0, 14),
+            Size = UDim2.new(1, 0, 0, 16),
             Text = if HasValidFooter then WindowInfo.Footer else "",
             TextColor3 = function()
                 return Library:GetDarkerColor(Library.Scheme.FontColor)
             end,
-            TextSize = 12,
+            TextSize = 13,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
             Visible = HasValidFooter,
@@ -11629,8 +11633,8 @@ function Library:CreateWindow(WindowInfo)
         local HasValidFooter = Footer ~= "" and Footer ~= "No Footer"
         FooterLabel.Text = Footer
         FooterLabel.Visible = HasValidFooter
-        WindowTitle.Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24)
-        WindowTitle.TextSize = if HasValidFooter then 16 else 19
+        WindowTitle.Size = UDim2.new(1, 0, 0, if HasValidFooter then 20 else 26)
+        WindowTitle.TextSize = if HasValidFooter then 17 else 20
     end
 
     function Window:SetIconSize(NewSize: UDim2 | number)
@@ -11638,7 +11642,7 @@ function Library:CreateWindow(WindowInfo)
             then UDim2.fromOffset(NewSize, NewSize)
             elseif typeof(NewSize) == "UDim2"
             then NewSize
-            else UDim2.fromOffset(36, 36)
+            else UDim2.fromOffset(40, 40)
 
         WindowInfo.IconSize = ResolvedSize
         if WindowIcon then
