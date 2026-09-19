@@ -2156,6 +2156,12 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
+    local PrevTargetPos = Vector2.new(0, 0)
+    local WindowVelocity = Vector2.new(0, 0)
+
+    local DragScale: UIScale? = nil
+    local BaseScaleValue = 1
+    local WindowOutlineStroke: UIStroke? = nil
 
     local SnapGuideX, SnapGuideY
 
@@ -2198,12 +2204,67 @@ function Library:MakeDraggable(
         end
     end
 
+    local function GetWindowScale(): UIScale?
+        if DragScale and DragScale.Parent == UI then
+            return DragScale
+        end
+        DragScale = UI:FindFirstChildOfClass("UIScale")
+        if DragScale then
+            BaseScaleValue = DragScale.Scale
+        end
+        return DragScale
+    end
+
+    local function GetWindowStroke(): UIStroke?
+        if WindowOutlineStroke and WindowOutlineStroke.Parent == UI then
+            return WindowOutlineStroke
+        end
+        for _, Child in UI:GetChildren() do
+            if Child:IsA("UIStroke") and Child.Name ~= "ShadowStroke" and Child.ZIndex >= 2 then
+                WindowOutlineStroke = Child
+                break
+            end
+        end
+        return WindowOutlineStroke
+    end
+
+    local function ApplyDragVisuals(Active: boolean)
+        local ScaleObj = GetWindowScale()
+        local StrokeObj = GetWindowStroke()
+
+        if Active then
+            if StrokeObj then
+                TweenService:Create(StrokeObj, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Color = Library.Scheme.AccentColor
+                }):Play()
+            end
+            if ScaleObj then
+                local LiftScale = BaseScaleValue * (Library.IsMobile and 1.02 or 1.015)
+                TweenService:Create(ScaleObj, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Scale = LiftScale
+                }):Play()
+            end
+        else
+            if StrokeObj then
+                TweenService:Create(StrokeObj, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Color = Library.Scheme.OutlineColor
+                }):Play()
+            end
+            if ScaleObj then
+                TweenService:Create(ScaleObj, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Scale = BaseScaleValue
+                }):Play()
+            end
+        end
+    end
+
     local function StopPhysics(ImmediateReset: boolean?)
         if ImmediateReset then
             if PhysicsConnection then
                 PhysicsConnection:Disconnect()
                 PhysicsConnection = nil
             end
+            ApplyDragVisuals(false)
             if FramePos then
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
@@ -2220,9 +2281,13 @@ function Library:MakeDraggable(
 
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
-            local FollowRate = Dragging and 30 or 24
+            local FollowRate = Dragging and 22 or 16
             local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos:Lerp(TargetPos, FollowAlpha)
+
+            local InstantVel = (TargetPos - PrevTargetPos) / dtClamped
+            PrevTargetPos = TargetPos
+            WindowVelocity = WindowVelocity:Lerp(InstantVel, math.clamp(16 * dtClamped, 0, 1))
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
@@ -2231,11 +2296,12 @@ function Library:MakeDraggable(
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                if Dist < 0.5 then
+                if Dist < 0.4 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     if IsMainWindow then
                         SavedWindowPosition = UI.Position
                     end
+                    ApplyDragVisuals(false)
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
                         PhysicsConnection = nil
@@ -2255,8 +2321,11 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
+        PrevTargetPos = CurrentPos
+        WindowVelocity = Vector2.new(0, 0)
 
         Dragging = true
+        ApplyDragVisuals(true)
         StartPhysicsLoop()
 
         Changed = Input.Changed:Connect(function()
@@ -2266,6 +2335,27 @@ function Library:MakeDraggable(
 
             Dragging = false
             HideSnapGuides()
+
+            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local Fling = WindowVelocity * 0.05
+            local MaxX = ViewportSize.X - (UI.AbsoluteSize.X * 0.15)
+            local MinX = -(UI.AbsoluteSize.X * 0.85)
+            local MaxY = ViewportSize.Y - (UI.AbsoluteSize.Y * 0.15)
+            local MinY = 0
+
+            local BaseScaleX = FramePos and FramePos.X.Scale or 0
+            local BaseScaleY = FramePos and FramePos.Y.Scale or 0
+
+            local TargetAbsX = BaseScaleX * ViewportSize.X + TargetPos.X + Fling.X
+            local TargetAbsY = BaseScaleY * ViewportSize.Y + TargetPos.Y + Fling.Y
+
+            local ClampedAbsX = math.clamp(TargetAbsX, MinX, MaxX)
+            local ClampedAbsY = math.clamp(TargetAbsY, MinY, MaxY)
+
+            TargetPos = Vector2.new(
+                ClampedAbsX - (BaseScaleX * ViewportSize.X),
+                ClampedAbsY - (BaseScaleY * ViewportSize.Y)
+            )
 
             if Changed and Changed.Connected then
                 Changed:Disconnect()
