@@ -448,10 +448,10 @@ local Templates = {
             Gap = 6,
             Padding = 6,
             CornerRadius = 8,
-            Height = 46,
+            Height = 42,
             Indicator = false,
             IndicatorWidth = 3,
-            IndicatorHeight = 22,
+            IndicatorHeight = 20,
             AutoDistribute = true,
         },
     },
@@ -11482,18 +11482,23 @@ function Library:CreateWindow(WindowInfo)
                 return
             end
 
-            local TargetHeight = TabButtonsStyle.Height or 46
+            local TargetHeight = TabButtonsStyle.Height or 42
             local TargetGap = TabButtonsStyle.Gap or 6
 
             if TabButtonsStyle.AutoDistribute then
+                local MinHeight = 36
+                local MaxHeight = 42
+                local MinGap = 4
+                local MaxGap = 8
+
                 if TabCount == 1 then
-                    TargetHeight = math.clamp(math.floor(UsableHeight * 0.18), 42, 58)
+                    TargetHeight = MaxHeight
                     TargetGap = 0
                 else
                     local SlotHeight = UsableHeight / TabCount
-                    TargetHeight = math.clamp(math.floor(SlotHeight * 0.74), 42, 58)
+                    TargetHeight = math.clamp(math.floor(SlotHeight * 0.8), MinHeight, MaxHeight)
                     local RemainingSpace = UsableHeight - (TargetHeight * TabCount)
-                    TargetGap = math.clamp(math.floor(RemainingSpace / (TabCount - 1)), 4, 20)
+                    TargetGap = math.clamp(math.floor(RemainingSpace / (TabCount - 1)), MinGap, MaxGap)
                 end
             end
 
@@ -11835,10 +11840,10 @@ function Library:CreateWindow(WindowInfo)
                 TabEntry.Label.Visible = not IsCompact
             end
             if TabEntry.Padding then
-                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 9)
+                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
                 TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
                 TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
-                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 9)
+                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
             end
             if TabEntry.Icon then
                 TabEntry.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
@@ -11974,18 +11979,18 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 9),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
                 PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 9),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
                 Parent = ButtonHolder,
             })
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(36, 0),
-                Size = UDim2.new(1, -36, 1, 0),
+                Position = UDim2.fromOffset(30, 0),
+                Size = UDim2.new(1, -30, 1, 0),
                 Text = Name,
-                TextSize = 16,
+                TextSize = 15,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
@@ -13432,19 +13437,19 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 9),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
                 PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 9),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
                 Parent = ButtonHolder,
             })
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(36, 0),
-                Size = UDim2.new(1, -36, 1, 0),
+                Position = UDim2.fromOffset(30, 0),
+                Size = UDim2.new(1, -30, 1, 0),
                 Text = Name,
-                TextSize = 16,
+                TextSize = 15,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
