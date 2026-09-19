@@ -378,7 +378,7 @@ local Templates = {
 
         Position = UDim2.fromOffset(6, 6),
         Size = UDim2.fromOffset(930, 730),
-        IconSize = UDim2.fromOffset(30, 30),
+        IconSize = UDim2.fromOffset(36, 36),
 
         AutoShow = true,
         Center = true,
@@ -445,12 +445,14 @@ local Templates = {
         TabSwipeOffset = 26,
         TabSwipeFrom = "bottom",
         TabButtonsStyle = {
-            Gap = 4,
-            Padding = 4,
+            Gap = 6,
+            Padding = 6,
             CornerRadius = 8,
+            Height = 46,
             Indicator = false,
             IndicatorWidth = 3,
-            IndicatorHeight = 20,
+            IndicatorHeight = 22,
+            AutoDistribute = true,
         },
     },
     Groupbox = {
@@ -11031,6 +11033,9 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.Font = Font.fromEnum(WindowInfo.Font :: any)
     end
     WindowInfo.CornerRadius = math.min(WindowInfo.CornerRadius, 28)
+    if typeof(WindowInfo.IconSize) == "number" then
+        WindowInfo.IconSize = UDim2.fromOffset(WindowInfo.IconSize, WindowInfo.IconSize)
+    end
 
     local TabButtonsStyle = WindowInfo.TabButtonsStyle
 
@@ -11405,6 +11410,8 @@ function Library:CreateWindow(WindowInfo)
             Library:ApplyLucideIcon(MoveIconImage, MoveIcon)
         end
 
+        local UpdateTabsDistribution
+
         --// Resize Button \\--
         if WindowInfo.Resizable then
             ResizeButton = New("TextButton", {
@@ -11421,6 +11428,9 @@ function Library:CreateWindow(WindowInfo)
             Library:MakeResizable(MainFrame, ResizeButton, function()
                 for _, Tab in Library.Tabs do
                     Tab:Resize(true)
+                end
+                if UpdateTabsDistribution then
+                    UpdateTabsDistribution()
                 end
             end)
         end
@@ -11442,17 +11452,60 @@ function Library:CreateWindow(WindowInfo)
             BottomRightRadius = UDim.new(0, 0),
             Parent = Tabs,
         })
-        New("UIListLayout", {
+        local TabsListLayout = New("UIListLayout", {
             Padding = UDim.new(0, TabButtonsStyle.Gap),
             Parent = Tabs,
         })
-        New("UIPadding", {
+        local TabsPadding = New("UIPadding", {
             PaddingBottom = UDim.new(0, TabButtonsStyle.Padding),
             PaddingLeft = UDim.new(0, TabButtonsStyle.Padding),
             PaddingRight = UDim.new(0, TabButtonsStyle.Padding),
             PaddingTop = UDim.new(0, TabButtonsStyle.Padding),
             Parent = Tabs,
         })
+
+        UpdateTabsDistribution = function()
+            local TabCount = #Library.TabButtons
+            if TabCount == 0 then
+                return
+            end
+
+            local CurrentHeight = Tabs.AbsoluteSize.Y
+            if CurrentHeight <= 100 then
+                local WindowHeight = MainFrame.AbsoluteSize.Y > 100 and MainFrame.AbsoluteSize.Y or WindowInfo.Size.Y.Offset
+                CurrentHeight = WindowHeight - 49
+            end
+
+            local OuterPad = TabButtonsStyle.Padding or 6
+            local UsableHeight = CurrentHeight - (OuterPad * 2)
+            if UsableHeight <= 0 then
+                return
+            end
+
+            local TargetHeight = TabButtonsStyle.Height or 46
+            local TargetGap = TabButtonsStyle.Gap or 6
+
+            if TabButtonsStyle.AutoDistribute then
+                if TabCount == 1 then
+                    TargetHeight = math.clamp(math.floor(UsableHeight * 0.18), 42, 58)
+                    TargetGap = 0
+                else
+                    local SlotHeight = UsableHeight / TabCount
+                    TargetHeight = math.clamp(math.floor(SlotHeight * 0.74), 42, 58)
+                    local RemainingSpace = UsableHeight - (TargetHeight * TabCount)
+                    TargetGap = math.clamp(math.floor(RemainingSpace / (TabCount - 1)), 4, 20)
+                end
+            end
+
+            TabsListLayout.Padding = UDim.new(0, TargetGap)
+            for _, TabEntry in Library.TabButtons do
+                if TabEntry.Button then
+                    TabEntry.Button.Size = UDim2.new(1, 0, 0, TargetHeight)
+                end
+            end
+        end
+
+        Tabs:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateTabsDistribution)
 
         --// Container \\--
         Container = New("Frame", {
@@ -11573,6 +11626,47 @@ function Library:CreateWindow(WindowInfo)
         FooterLabel.Visible = HasValidFooter
         WindowTitle.Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24)
         WindowTitle.TextSize = if HasValidFooter then 16 else 19
+    end
+
+    function Window:SetIconSize(NewSize: UDim2 | number)
+        local ResolvedSize = if typeof(NewSize) == "number"
+            then UDim2.fromOffset(NewSize, NewSize)
+            elseif typeof(NewSize) == "UDim2"
+            then NewSize
+            else UDim2.fromOffset(36, 36)
+
+        WindowInfo.IconSize = ResolvedSize
+        if WindowIcon then
+            WindowIcon.Size = ResolvedSize
+        end
+        if TitleTextHolder then
+            TitleTextHolder.Size = UDim2.new(1, -(WindowInfo.Icon and (ResolvedSize.X.Offset + 8) or 0), 1, 0)
+        end
+        if TitleHolderPadding then
+            TitleHolderPadding.PaddingLeft = UDim.new(0, if IsCompact then math.floor(math.max(0, WindowInfo.SidebarCompactWidth - ResolvedSize.X.Offset) / 2) else 12)
+        end
+    end
+
+    function Window:SetIcon(NewIcon: any)
+        WindowInfo.Icon = NewIcon
+        if not WindowIcon then
+            return
+        end
+
+        local CustomIcon = Library:GetCustomIcon(NewIcon)
+        if CustomIcon then
+            Library:ApplyLucideIcon(WindowIcon, CustomIcon)
+            WindowIcon.Visible = true
+        elseif typeof(NewIcon) == "string" or typeof(NewIcon) == "number" then
+            WindowIcon.Image = tostring(NewIcon)
+            WindowIcon.Visible = true
+        else
+            WindowIcon.Visible = false
+        end
+
+        if TitleTextHolder then
+            TitleTextHolder.Size = UDim2.new(1, -(WindowInfo.Icon and (WindowInfo.IconSize.X.Offset + 8) or 0), 1, 0)
+        end
     end
 
     function Window:SetAlwaysOnTop(Enabled: boolean)
@@ -11736,17 +11830,19 @@ function Library:CreateWindow(WindowInfo)
             WindowIcon.Visible = IsCompact
         end
 
-        for _, Button in Library.TabButtons do
-            if not Button.Icon then
-                continue
+        for _, TabEntry in Library.TabButtons do
+            if TabEntry.Label then
+                TabEntry.Label.Visible = not IsCompact
             end
-
-            Button.Label.Visible = not IsCompact
-            Button.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
-            Button.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
-            Button.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
-            Button.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
-            Button.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+            if TabEntry.Padding then
+                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 9)
+                TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
+                TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
+                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 9)
+            end
+            if TabEntry.Icon then
+                TabEntry.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+            end
         end
     end
 
@@ -11760,6 +11856,12 @@ function Library:CreateWindow(WindowInfo)
 
     function Window:GetSidebarWidth()
         return Tabs.Size.X.Offset
+    end
+
+    function Window:UpdateTabsDistribution()
+        if UpdateTabsDistribution then
+            UpdateTabsDistribution()
+        end
     end
 
     function Window:SetSidebarWidth(Width)
@@ -11778,6 +11880,9 @@ function Library:CreateWindow(WindowInfo)
         end
         if not IsCompact then
             LastExpandedWidth = Width
+        end
+        if UpdateTabsDistribution then
+            UpdateTabsDistribution()
         end
     end
 
@@ -11837,7 +11942,7 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 40),
+                Size = UDim2.new(1, 0, 0, TabButtonsStyle.Height),
                 Text = "",
                 LayoutOrder = Order,
                 Parent = Tabs,
@@ -11869,16 +11974,16 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 9),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
                 PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 9),
                 Parent = ButtonHolder,
             })
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
-                Size = UDim2.new(1, -30, 1, 0),
+                Position = UDim2.fromOffset(36, 0),
+                Size = UDim2.new(1, -36, 1, 0),
                 Text = Name,
                 TextSize = 16,
                 TextTransparency = 0.5,
@@ -11900,10 +12005,14 @@ function Library:CreateWindow(WindowInfo)
             end
 
             table.insert(Library.TabButtons, {
+                Button = TabButton,
                 Label = TabLabel,
                 Padding = ButtonPadding,
                 Icon = TabIcon,
             })
+            if UpdateTabsDistribution then
+                UpdateTabsDistribution()
+            end
 
             --// Tab Container \\--
             TabContainer = New("Frame", {
@@ -13222,6 +13331,9 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 TabButton:Destroy()
+                if UpdateTabsDistribution then
+                    UpdateTabsDistribution()
+                end
             end
 
             Library.Tabs[Name] = nil
@@ -13288,7 +13400,7 @@ function Library:CreateWindow(WindowInfo)
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 40),
+                Size = UDim2.new(1, 0, 0, TabButtonsStyle.Height),
                 Text = "",
                 LayoutOrder = Order,
                 Parent = Tabs,
@@ -13320,17 +13432,17 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 9),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
                 PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 9),
                 Parent = ButtonHolder,
             })
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
-                Size = UDim2.new(1, -30, 1, 0),
+                Position = UDim2.fromOffset(36, 0),
+                Size = UDim2.new(1, -36, 1, 0),
                 Text = Name,
                 TextSize = 16,
                 TextTransparency = 0.5,
@@ -13352,10 +13464,14 @@ function Library:CreateWindow(WindowInfo)
             end
 
             table.insert(Library.TabButtons, {
+                Button = TabButton,
                 Label = TabLabel,
                 Padding = ButtonPadding,
                 Icon = TabIcon,
             })
+            if UpdateTabsDistribution then
+                UpdateTabsDistribution()
+            end
 
             --// Tab Container \\--
             TabContainer = New("ScrollingFrame", {
@@ -13505,6 +13621,9 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 TabButton:Destroy()
+                if UpdateTabsDistribution then
+                    UpdateTabsDistribution()
+                end
             end
 
             Library.Tabs[Name] = nil
