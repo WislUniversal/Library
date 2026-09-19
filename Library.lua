@@ -2317,7 +2317,7 @@ function Library:MakeDraggable(
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
 
-            local FollowRate = Dragging and 30 or 24
+            local FollowRate = if IsMainWindow then (Dragging and 22 or 26) else (Dragging and 30 or 24)
             local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
 
@@ -2326,35 +2326,14 @@ function Library:MakeDraggable(
 
             UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
 
-            if IsMainWindow then
-                local LagX = TargetPos.X - CurrentPos.X
-                local MaxTilt = 2.4
-                if Dragging then
-                    TargetTilt = math.clamp(LagX * 0.045, -MaxTilt, MaxTilt)
-                else
-                    TargetTilt = 0
-                end
-
-                local TiltRate = Dragging and 18 or 24
-                local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
-                CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * TiltAlpha
-
-                local AppliedTilt = 0
-                if math.abs(CurrentTilt) > 0.08 then
-                    AppliedTilt = math.round(CurrentTilt * 10) / 10
-                end
-
-                if AppliedTilt ~= LastAppliedTilt then
-                    LastAppliedTilt = AppliedTilt
-                    UI.Rotation = AppliedTilt
-                end
+            if IsMainWindow and UI.Rotation ~= 0 then
+                UI.Rotation = 0
             end
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                local TiltSettled = not IsMainWindow or (math.abs(CurrentTilt) < 0.05)
 
-                if Dist < 0.5 and TiltSettled then
+                if Dist < 0.5 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     UI.Rotation = 0
                     CurrentTilt = 0
@@ -2389,7 +2368,7 @@ function Library:MakeDraggable(
         UI.Rotation = 0
 
         if IsMainWindow then
-            Library:ApplyDragCulling()
+            Library:RestoreDragCulling()
         end
 
         local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
@@ -11579,6 +11558,7 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             BorderSizePixel = 0,
+            ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
@@ -12001,6 +11981,7 @@ function Library:CreateWindow(WindowInfo)
             --// Tab Container \\--
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
+                ClipsDescendants = true,
                 Position = UDim2.fromScale(0, 0),
                 Size = UDim2.fromScale(1, 1),
                 Visible = false,
@@ -12011,6 +11992,7 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
+                ClipsDescendants = true,
                 ScrollBarImageTransparency = 1,
                 ScrollBarThickness = 0,
                 Size = UDim2.new(0.5, -3, 1, 0),
@@ -12045,6 +12027,7 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
+                ClipsDescendants = true,
                 Position = UDim2.fromScale(1, 0),
                 ScrollBarImageTransparency = 1,
                 ScrollBarThickness = 0,
@@ -12727,6 +12710,7 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
+                    ClipsDescendants = true,
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
@@ -12838,6 +12822,7 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = 1,
                     BorderSizePixel = 0,
                     CanvasSize = UDim2.fromScale(0, 0),
+                    ClipsDescendants = true,
                     LayoutOrder = 2,
                     ScrollBarThickness = 0,
                     Size = UDim2.fromScale(1, 0),
@@ -12892,20 +12877,18 @@ function Library:CreateWindow(WindowInfo)
                 local TopSize = math.max(TopMeasured, TopMin)
 
                 local ContentMeasured = GroupboxList.AbsoluteContentSize.Y / Library.DPIScale
-                if ContentMeasured <= 0 then
-                    local EstimatedContent = 0
-                    local VisibleCount = 0
-                    for _, Child in GroupboxContainer:GetChildren() do
-                        if Child:IsA("GuiObject") and Child.Visible ~= false then
-                            EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
-                            VisibleCount = VisibleCount + 1
-                        end
+                local EstimatedContent = 0
+                local VisibleCount = 0
+                for _, Child in GroupboxContainer:GetChildren() do
+                    if Child:IsA("GuiObject") and Child.Visible ~= false then
+                        EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
+                        VisibleCount = VisibleCount + 1
                     end
-                    if VisibleCount > 0 then
-                        EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
-                    end
-                    ContentMeasured = math.max(ContentMeasured, EstimatedContent)
                 end
+                if VisibleCount > 0 then
+                    EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
+                end
+                ContentMeasured = math.max(ContentMeasured, EstimatedContent)
 
                 local ContainerSize = ContentMeasured + 14
                 if Groupbox.PoppedOut then
@@ -13455,6 +13438,7 @@ function Library:CreateWindow(WindowInfo)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
+                ClipsDescendants = true,
                 ScrollBarThickness = 0,
                 Position = UDim2.fromScale(0, 0),
                 Size = UDim2.fromScale(1, 1),
