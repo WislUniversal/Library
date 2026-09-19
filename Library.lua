@@ -2154,16 +2154,8 @@ function Library:MakeDraggable(
     local InputChanged
     local PhysicsConnection: RBXScriptConnection? = nil
 
-    local OrigAnchor = UI.AnchorPoint
-    local GrabRatioX = 0.5
-    local GrabRatioY = 0
-    local StartPivotOffset = Vector2.new(0, 0)
-    local CurrentPivot = Vector2.new(0, 0)
-    local TargetPivot = Vector2.new(0, 0)
-    local PrevTargetX = 0
-    local VelocityX = 0
-    local CurrentTilt = 0
-    local TargetTilt = 0
+    local CurrentPos = Vector2.new(0, 0)
+    local TargetPos = Vector2.new(0, 0)
 
     local SnapGuideX, SnapGuideY
 
@@ -2212,17 +2204,8 @@ function Library:MakeDraggable(
                 PhysicsConnection:Disconnect()
                 PhysicsConnection = nil
             end
-            UI.Rotation = 0
-            UI.AnchorPoint = OrigAnchor
-            if FramePos and TargetPivot then
-                local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-                local BaseScaleX = FramePos.X.Scale
-                local BaseScaleY = FramePos.Y.Scale
-                local FinalTopLeftX = TargetPivot.X - StartPivotOffset.X
-                local FinalTopLeftY = TargetPivot.Y - StartPivotOffset.Y
-                local OffsetX = FinalTopLeftX - BaseScaleX * ViewportSize.X
-                local OffsetY = FinalTopLeftY - BaseScaleY * ViewportSize.Y
-                UI.Position = UDim2.new(BaseScaleX, OffsetX, BaseScaleY, OffsetY)
+            if FramePos then
+                UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
                     SavedWindowPosition = UI.Position
                 end
@@ -2237,50 +2220,22 @@ function Library:MakeDraggable(
 
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
-            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-
-            local FollowRate = Dragging and 26 or 22
+            local FollowRate = Dragging and 30 or 24
             local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
-            CurrentPivot = CurrentPivot:Lerp(TargetPivot, FollowAlpha)
-
-            local InstantVelX = (TargetPivot.X - PrevTargetX) / dtClamped
-            PrevTargetX = TargetPivot.X
-            VelocityX = VelocityX + (InstantVelX - VelocityX) * math.clamp(14 * dtClamped, 0, 1)
-
-            if Dragging then
-                local MaxTilt = 3.6
-                TargetTilt = math.clamp(VelocityX * 0.0026, -MaxTilt, MaxTilt)
-            else
-                TargetTilt = 0
-            end
-
-            local TiltRate = Dragging and 18 or 24
-            CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * math.clamp(TiltRate * dtClamped, 0, 1)
+            CurrentPos = CurrentPos:Lerp(TargetPos, FollowAlpha)
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
-            local PivotOffsetX = CurrentPivot.X - BaseScaleX * ViewportSize.X
-            local PivotOffsetY = CurrentPivot.Y - BaseScaleY * ViewportSize.Y
 
-            UI.Position = UDim2.new(BaseScaleX, PivotOffsetX, BaseScaleY, PivotOffsetY)
-            UI.Rotation = CurrentTilt
+            UI.Position = UDim2.new(BaseScaleX, CurrentPos.X, BaseScaleY, CurrentPos.Y)
 
             if not Dragging then
-                local Dist = (CurrentPivot - TargetPivot).Magnitude
-                if Dist < 0.4 and math.abs(CurrentTilt) < 0.04 then
-                    UI.Rotation = 0
-                    UI.AnchorPoint = OrigAnchor
-
-                    local FinalTopLeftX = TargetPivot.X - StartPivotOffset.X
-                    local FinalTopLeftY = TargetPivot.Y - StartPivotOffset.Y
-                    local OffsetX = FinalTopLeftX - BaseScaleX * ViewportSize.X
-                    local OffsetY = FinalTopLeftY - BaseScaleY * ViewportSize.Y
-                    UI.Position = UDim2.new(BaseScaleX, OffsetX, BaseScaleY, OffsetY)
-
+                local Dist = (CurrentPos - TargetPos).Magnitude
+                if Dist < 0.5 then
+                    UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     if IsMainWindow then
                         SavedWindowPosition = UI.Position
                     end
-
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
                         PhysicsConnection = nil
@@ -2297,29 +2252,9 @@ function Library:MakeDraggable(
 
         StartPos = Input.Position
         FramePos = UI.Position
-        OrigAnchor = UI.AnchorPoint
 
-        local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-        local ElemSize = UI.AbsoluteSize
-        local StartAbsPos = UI.AbsolutePosition
-
-        GrabRatioX = math.clamp((Input.Position.X - StartAbsPos.X) / math.max(ElemSize.X, 1), 0.05, 0.95)
-        GrabRatioY = 0
-        StartPivotOffset = Vector2.new(ElemSize.X * GrabRatioX, ElemSize.Y * GrabRatioY)
-
-        CurrentPivot = Vector2.new(StartAbsPos.X + StartPivotOffset.X, StartAbsPos.Y + StartPivotOffset.Y)
-        TargetPivot = CurrentPivot
-        PrevTargetX = TargetPivot.X
-        VelocityX = 0
-        CurrentTilt = UI.Rotation or 0
-        TargetTilt = 0
-
-        UI.AnchorPoint = Vector2.new(GrabRatioX, GrabRatioY)
-        local BaseScaleX = FramePos.X.Scale
-        local BaseScaleY = FramePos.Y.Scale
-        local PivotOffsetX = CurrentPivot.X - BaseScaleX * ViewportSize.X
-        local PivotOffsetY = CurrentPivot.Y - BaseScaleY * ViewportSize.Y
-        UI.Position = UDim2.new(BaseScaleX, PivotOffsetX, BaseScaleY, PivotOffsetY)
+        CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
+        TargetPos = CurrentPos
 
         Dragging = true
         StartPhysicsLoop()
@@ -2362,24 +2297,24 @@ function Library:MakeDraggable(
             local NewX = FramePos.X.Offset + Delta.X
             local NewY = FramePos.Y.Offset + Delta.Y
 
-            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-            local AbsX = FramePos.X.Scale * ViewportSize.X + NewX
-            local AbsY = FramePos.Y.Scale * ViewportSize.Y + NewY
-            local ElemSize = UI.AbsoluteSize
-
             if SnapConfig and SnapConfig.Enabled then
+                local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
                 local Distance = SnapConfig.Distance or 28
                 local Margin = SnapConfig.Margin or 8
+
+                local AbsX = FramePos.X.Scale * ViewportSize.X + NewX
+                local AbsY = FramePos.Y.Scale * ViewportSize.Y + NewY
+                local ElemSize = UI.AbsoluteSize
 
                 local TargetsX, TargetsY = GetSnapEdges(ElemSize, ViewportSize, Margin, SnapConfig.AvoidCoreGui ~= false)
                 local SnappedX, SnappedXName = GetClosestSnapTarget(AbsX, TargetsX, Distance)
                 local SnappedY, SnappedYName = GetClosestSnapTarget(AbsY, TargetsY, Distance)
 
                 if SnappedX then
-                    AbsX = SnappedX
+                    NewX = SnappedX - FramePos.X.Scale * ViewportSize.X
                 end
                 if SnappedY then
-                    AbsY = SnappedY
+                    NewY = SnappedY - FramePos.Y.Scale * ViewportSize.Y
                 end
 
                 local GuideX, GuideY = GetSnapGuides()
@@ -2394,7 +2329,7 @@ function Library:MakeDraggable(
                 end
             end
 
-            TargetPivot = Vector2.new(AbsX + StartPivotOffset.X, AbsY + StartPivotOffset.Y)
+            TargetPos = Vector2.new(NewX, NewY)
         end
     end)
 
@@ -3358,6 +3293,7 @@ function Library:AddDraggableButton(...)
 
     local ActiveInput: InputObject? = nil
     local TouchStartPos: Vector2? = nil
+    local LatestInputPos: Vector2? = nil
     local DragOffset: Vector2? = nil
     local IsDragging = false
     local HoldThread: thread? = nil
@@ -3380,6 +3316,17 @@ function Library:AddDraggableButton(...)
         TweenService:Create(Button, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             Size = BaseSize
         }):Play()
+
+        Button.Rotation = 0
+        local HalfW = Button.AbsoluteSize.X * 0.5
+        local HalfH = Button.AbsoluteSize.Y * 0.5
+        Button.AnchorPoint = Vector2.new(0, 0)
+        Button.Position = UDim2.fromOffset(CurrentButtonPos.X - HalfW, CurrentButtonPos.Y - HalfH)
+
+        if PhysicsConnection then
+            PhysicsConnection:Disconnect()
+            PhysicsConnection = nil
+        end
     end
 
     local function CancelHold()
@@ -3421,16 +3368,7 @@ function Library:AddDraggableButton(...)
             if not IsDragging then
                 local Dist = (CurrentButtonPos - TargetButtonPos).Magnitude
                 if Dist < 0.4 and math.abs(CurrentBtnTilt) < 0.05 then
-                    Button.Rotation = 0
-                    local HalfW = Button.AbsoluteSize.X * 0.5
-                    local HalfH = Button.AbsoluteSize.Y * 0.5
-                    Button.AnchorPoint = Vector2.new(0, 0)
-                    Button.Position = UDim2.fromOffset(CurrentButtonPos.X - HalfW, CurrentButtonPos.Y - HalfH)
-
-                    if PhysicsConnection then
-                        PhysicsConnection:Disconnect()
-                        PhysicsConnection = nil
-                    end
+                    ResetDragVisual()
                 end
             end
         end)
@@ -3448,23 +3386,25 @@ function Library:AddDraggableButton(...)
 
             ActiveInput = Input
             TouchStartPos = Vector2.new(Input.Position.X, Input.Position.Y)
+            LatestInputPos = TouchStartPos
             IsDragging = false
             CancelHold()
 
             if not ExcludeDragging and not Library.CantDragForced then
-                HoldThread = task.delay(0.35, function()
-                    if ActiveInput == Input and not IsDragging then
+                HoldThread = task.delay(0.28, function()
+                    if ActiveInput and not IsDragging then
                         local HalfW = Button.AbsoluteSize.X * 0.5
                         local HalfH = Button.AbsoluteSize.Y * 0.5
                         local Center = Button.AbsolutePosition + Vector2.new(HalfW, HalfH)
-                        DragOffset = Vector2.new(Input.Position.X - Center.X, Input.Position.Y - Center.Y)
+                        local CurInputPos = LatestInputPos or Vector2.new(Input.Position.X, Input.Position.Y)
+                        DragOffset = Vector2.new(CurInputPos.X - Center.X, CurInputPos.Y - Center.Y)
 
                         Button.AnchorPoint = Vector2.new(0.5, 0.5)
                         CurrentButtonPos = Center
                         TargetButtonPos = Center
                         PrevTargetBtnX = Center.X
                         BtnVelocityX = 0
-                        CurrentBtnTilt = Button.Rotation or 0
+                        CurrentBtnTilt = 0
                         TargetBtnTilt = 0
                         Button.Position = UDim2.fromOffset(Center.X, Center.Y)
                         IsDragging = true
@@ -3488,12 +3428,15 @@ function Library:AddDraggableButton(...)
     table.insert(
         DraggableButton.Connections,
         UserInputService.InputChanged:Connect(function(Input: InputObject)
-            if Input ~= ActiveInput then
+            local IsMatch = (Input == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseMovement)
+            if not IsMatch then
                 return
             end
 
+            local InputPos = Vector2.new(Input.Position.X, Input.Position.Y)
+            LatestInputPos = InputPos
+
             if IsDragging then
-                local InputPos = Vector2.new(Input.Position.X, Input.Position.Y)
                 local RawCenterX = InputPos.X - (DragOffset and DragOffset.X or 0)
                 local RawCenterY = InputPos.Y - (DragOffset and DragOffset.Y or 0)
 
@@ -3506,17 +3449,13 @@ function Library:AddDraggableButton(...)
                     math.clamp(RawCenterX, HalfW, Viewport.X - HalfW),
                     math.clamp(RawCenterY, HalfH, Viewport.Y - HalfH)
                 )
-            elseif TouchStartPos then
-                local Dist = (Vector2.new(Input.Position.X, Input.Position.Y) - TouchStartPos).Magnitude
-                if Dist > 14 then
-                    CancelHold()
-                end
             end
         end)
     )
 
     local function HandleInputEnded(Input: InputObject)
-        if Input ~= ActiveInput then
+        local IsMatch = (Input == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseButton1)
+        if not IsMatch then
             return
         end
 
@@ -3526,18 +3465,16 @@ function Library:AddDraggableButton(...)
             IsDragging = false
             ResetDragVisual()
         else
-            local Dist = TouchStartPos and (Vector2.new(Input.Position.X, Input.Position.Y) - TouchStartPos).Magnitude or 0
-            if Dist <= 14 then
-                local Now = tick()
-                if Now - LastClickTime >= 0.03 then
-                    LastClickTime = Now
-                    Library:SafeCallback(Func, DraggableButton)
-                end
+            local Now = tick()
+            if Now - LastClickTime >= 0.03 then
+                LastClickTime = Now
+                Library:SafeCallback(Func, DraggableButton)
             end
         end
 
         ActiveInput = nil
         TouchStartPos = nil
+        LatestInputPos = nil
         DragOffset = nil
     end
 
