@@ -2213,6 +2213,10 @@ function Library:MakeDraggable(
         Dragging = false
         HideSnapGuides()
 
+        if IsMainWindow and FramePos then
+            SavedWindowPosition = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
+        end
+
         if MoveConnection then
             MoveConnection:Disconnect()
             MoveConnection = nil
