@@ -2213,6 +2213,12 @@ function Library:MakeDraggable(
         Dragging = false
         HideSnapGuides()
 
+        if IsMainWindow and FramePos and TargetPos then
+            local BaseScaleX = FramePos.X.Scale
+            local BaseScaleY = FramePos.Y.Scale
+            SavedWindowPosition = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
+        end
+
         if MoveConnection then
             MoveConnection:Disconnect()
             MoveConnection = nil
@@ -14101,15 +14107,10 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
-        local PriorToggled = Library.Toggled
         if typeof(Value) == "boolean" then
             Library.Toggled = Value
         else
             Library.Toggled = not Library.Toggled
-        end
-
-        if PriorToggled and not Library.Toggled and MainFrame then
-            SavedWindowPosition = MainFrame.Position
         end
 
         local BaseScale = GetBaseScale()
@@ -14126,19 +14127,22 @@ function Library:CreateWindow(WindowInfo)
             end
             table.clear(ActiveToggleTweens)
 
-            local TargetPos = SavedWindowPosition or MainFrame.Position
-            SavedWindowPosition = TargetPos
+            local TargetPos = SavedWindowPosition
+            if not TargetPos then
+                TargetPos = MainFrame.Position
+                SavedWindowPosition = TargetPos
+            end
 
             if Library.Toggled then
-                local StartPos = UDim2.new(
-                    TargetPos.X.Scale,
-                    TargetPos.X.Offset,
-                    TargetPos.Y.Scale,
-                    TargetPos.Y.Offset + 10
-                )
-
-                MainFrame.Position = StartPos
-                MainFrame.Visible = true
+                if not MainFrame.Visible then
+                    MainFrame.Position = UDim2.new(
+                        TargetPos.X.Scale,
+                        TargetPos.X.Offset,
+                        TargetPos.Y.Scale,
+                        TargetPos.Y.Offset + 10
+                    )
+                    MainFrame.Visible = true
+                end
 
                 local OpenTween = TweenService:Create(
                     MainFrame,
