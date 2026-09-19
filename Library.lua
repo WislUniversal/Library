@@ -10767,7 +10767,6 @@ function Library:CreateWindow(WindowInfo)
     Library.Scheme.Font = WindowInfo.Font
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.AllowModifiers = if WindowInfo.AllowModifiers ~= nil then WindowInfo.AllowModifiers else false
-    Window.AllowModifiers = Library.AllowModifiers
     Library.GlobalSearch = WindowInfo.GlobalSearch
 
     Library.Animations = WindowInfo.Animations
@@ -11212,7 +11211,9 @@ function Library:CreateWindow(WindowInfo)
     end
 
     --// Window Table \\--
-    local Window = {}
+    local Window = {
+        AllowModifiers = Library.AllowModifiers,
+    }
     local Fading = false
 
     local function SetUICorner(UICorner, Corner, HalfValue)
