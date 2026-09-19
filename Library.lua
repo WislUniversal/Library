@@ -400,8 +400,12 @@ local Templates = {
         Font = Enum.Font.FredokaOne,
         ToggleKeybind = Enum.KeyCode.RightControl,
 
+        IsMobile = nil,
         ShowMobileButtons = true,
+        ShowLockButton = false,
         MobileButtonsSide = "Left",
+        ToggleIcon = "rbxassetid://81779667323093",
+        ToggleIconSize = UDim2.fromOffset(50, 50),
 
         UnlockMouseWhileOpen = true,
 
@@ -3136,12 +3140,24 @@ function Library:AddDraggableButton(...)
     local Func
     local ExcludeScaling
     local ExcludeDragging
+    local Icon
+    local Size
+    local CornerRadius
+    local BackgroundColor3
+    local IconColor
+    local GradientColors
 
     if typeof(Params) == "table" then
         Text = Params.Text
         Func = Params.Callback or Params.Func
         ExcludeScaling = Params.ExcludeScaling
         ExcludeDragging = Params.ExcludeDragging
+        Icon = Params.Icon or Params.Image
+        Size = Params.Size
+        CornerRadius = Params.CornerRadius
+        BackgroundColor3 = Params.BackgroundColor3
+        IconColor = Params.IconColor
+        GradientColors = Params.GradientColors
     elseif typeof(Params) == "string" then
         Text = Params
         Func = select(2, ...)
@@ -3149,25 +3165,33 @@ function Library:AddDraggableButton(...)
         ExcludeDragging = select(4, ...)
     end
 
+    if Icon then
+        if typeof(Icon) == "number" or (typeof(Icon) == "string" and tonumber(Icon)) then
+            Icon = "rbxassetid://" .. tostring(Icon)
+        end
+    end
+
     local DraggableButton = {
         Connections = {},
-        Destroyed = false
+        Destroyed = false,
     }
 
     local Button = New("TextButton", {
-        BackgroundColor3 = "BackgroundColor",
+        BackgroundColor3 = (Icon and Color3.fromRGB(255, 255, 255)) or BackgroundColor3 or "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
+        Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
+        Text = (not Icon and Text) or "",
         TextSize = 16,
         ZIndex = 1,
         Parent = Floats,
     })
-    table.insert(
-        Library.Corners,
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = Button,
-        })
-    )
+
+    local CornerObj = New("UICorner", {
+        CornerRadius = UDim.new(0, CornerRadius or (Icon and 14) or Library.CornerRadius),
+        Parent = Button,
+    })
+    table.insert(Library.Corners, CornerObj)
+
     if not ExcludeScaling then
         table.insert(
             Library.Scales,
@@ -3178,11 +3202,41 @@ function Library:AddDraggableButton(...)
     end
     Library:AddOutline(Button)
 
+    local IconLabel
+    if Icon then
+        New("UIGradient", {
+            Color = GradientColors or ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(168, 85, 255)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(98, 32, 178)),
+            }),
+            Rotation = 45,
+            Parent = Button,
+        })
+
+        IconLabel = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = Icon,
+            ImageColor3 = IconColor or Color3.fromRGB(255, 255, 255),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromScale(0.7, 0.7),
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 3,
+            Parent = Button,
+        })
+        DraggableButton.IconLabel = IconLabel
+    end
+
     local MaxClickDistance = ExcludeDragging and 12 or math.huge
     Button.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) then
             return
         end
+
+        local BaseSize = Button.Size
+        TweenService:Create(Button, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(math.max(BaseSize.X.Offset - 4, 10), math.max(BaseSize.Y.Offset - 4, 10)),
+        }):Play()
 
         local StartPos = Input.Position
         local Changed
@@ -3190,6 +3244,10 @@ function Library:AddDraggableButton(...)
             if Input.UserInputState ~= Enum.UserInputState.End then
                 return
             end
+
+            TweenService:Create(Button, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = BaseSize,
+            }):Play()
 
             if (Input.Position - StartPos).Magnitude <= MaxClickDistance then
                 Library:SafeCallback(Func, DraggableButton)
@@ -3202,15 +3260,38 @@ function Library:AddDraggableButton(...)
         end)
     end)
 
-    function DraggableButton:SetText(Text: string)
-        local X, Y = Library:GetTextBounds(Text, Library.Scheme.Font, 16)
+    Button.InputEnded:Connect(function(Input: InputObject)
+        if IsClickInput(Input) then
+            local BaseSize = Size or (Icon and UDim2.fromOffset(50, 50)) or Button.Size
+            TweenService:Create(Button, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = BaseSize,
+            }):Play()
+        end
+    end)
 
-        Button.Text = Text
+    function DraggableButton:SetText(NewText: string)
+        if not NewText then
+            return
+        end
+        local X, Y = Library:GetTextBounds(NewText, Library.Scheme.Font, 16)
+
+        Button.Text = NewText
         Button.Size = UDim2.fromOffset(X * 2, Y * 2)
     end
 
+    function DraggableButton:SetIcon(NewIcon: any)
+        if typeof(NewIcon) == "number" or (typeof(NewIcon) == "string" and tonumber(NewIcon)) then
+            NewIcon = "rbxassetid://" .. tostring(NewIcon)
+        end
+        if DraggableButton.IconLabel then
+            DraggableButton.IconLabel.Image = tostring(NewIcon)
+        end
+    end
+
     Library:MakeDraggable(Button, Button, true)
-    DraggableButton:SetText(Text)
+    if not Icon and Text then
+        DraggableButton:SetText(Text)
+    end
     DraggableButton.Button = Button
 
     if not table.find(Library.DraggableElements, Button) then
@@ -10606,6 +10687,9 @@ end
 
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
+    if WindowInfo.IsMobile ~= nil then
+        Library.IsMobile = WindowInfo.IsMobile
+    end
     local ViewportSize: Vector2 = workspace.CurrentCamera.ViewportSize
     if RunService:IsStudio() and ViewportSize.X <= 5 and ViewportSize.Y <= 5 then
         repeat
@@ -13842,32 +13926,54 @@ function Library:CreateWindow(WindowInfo)
     end
 
     if Library.IsMobile then
-        local ToggleButton = Library:AddDraggableButton("Toggle", function()
-            Library:Toggle()
-        end, true, true)
+        local ToggleButton
+        if WindowInfo.ToggleIcon then
+            ToggleButton = Library:AddDraggableButton({
+                Icon = WindowInfo.ToggleIcon,
+                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(50, 50),
+                Func = function()
+                    Library:Toggle()
+                end,
+                ExcludeScaling = true,
+                ExcludeDragging = true,
+            })
+        else
+            ToggleButton = Library:AddDraggableButton("Toggle", function()
+                Library:Toggle()
+            end, true, true)
+        end
 
-        local LockButton = Library:AddDraggableButton("Lock", function(self)
-            Library.CantDragForced = not Library.CantDragForced
-            self:SetText(Library.CantDragForced and "Unlock" or "Lock")
-        end, true, true)
+        local LockButton
+        if WindowInfo.ShowLockButton then
+            LockButton = Library:AddDraggableButton("Lock", function(self)
+                Library.CantDragForced = not Library.CantDragForced
+                self:SetText(Library.CantDragForced and "Unlock" or "Lock")
+            end, true, true)
+        end
 
         if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
             ToggleButton.Button.Position = UDim2.new(1, -6, 0, 6)
 
-            LockButton.Button.AnchorPoint = Vector2.new(1, 0)
-            LockButton.Button.Position = UDim2.new(1, -(ToggleButton.Button.Size.X.Offset + 12), 0, 6)
+            if LockButton then
+                LockButton.Button.AnchorPoint = Vector2.new(1, 0)
+                LockButton.Button.Position = UDim2.new(1, -(ToggleButton.Button.Size.X.Offset + 12), 0, 6)
+            end
         else
             ToggleButton.Button.AnchorPoint = Vector2.new(0, 0)
             ToggleButton.Button.Position = UDim2.fromOffset(6, 6)
 
-            LockButton.Button.AnchorPoint = Vector2.new(0, 0)
-            LockButton.Button.Position = UDim2.fromOffset(ToggleButton.Button.Size.X.Offset + 12, 6)
+            if LockButton then
+                LockButton.Button.AnchorPoint = Vector2.new(0, 0)
+                LockButton.Button.Position = UDim2.fromOffset(ToggleButton.Button.Size.X.Offset + 12, 6)
+            end
         end
 
         if WindowInfo.ShowMobileButtons == false then
             ToggleButton.Button.Visible = false
-            LockButton.Button.Visible = false
+            if LockButton then
+                LockButton.Button.Visible = false
+            end
         end
     end
 
