@@ -1779,9 +1779,8 @@ do
 end
 
 local function RestoreMouseIcon()
-    pcall(function() 
+    pcall(function()
         RunService:UnbindFromRenderStep(Library.ShowCursorBinding)
-        RunService.RenderStepped:Wait()
     end)
 
     UserInputService.MouseIconEnabled = Library.OriginalMouseIconEnabled
@@ -2156,10 +2155,6 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
-    local PrevTargetX = 0
-    local WindowVelocityX = 0
-    local CurrentTilt = 0
-    local TargetTilt = 0
 
     local CachedViewportSize = Vector2.new(1920, 1080)
     local CachedElemSize = Vector2.new(600, 400)
@@ -2252,35 +2247,19 @@ function Library:MakeDraggable(
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
 
-            local FollowRate = Dragging and 28 or 22
+            local FollowRate = Dragging and 26 or 20
             local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
-
-            local InstantVelX = (TargetPos.X - PrevTargetX) / dtClamped
-            PrevTargetX = TargetPos.X
-            local VelAlpha = 1 - math.exp(-14 * dtClamped)
-            WindowVelocityX = WindowVelocityX + (InstantVelX - WindowVelocityX) * VelAlpha
-
-            if Dragging then
-                local MaxTilt = 6.0
-                TargetTilt = math.clamp(WindowVelocityX * 0.006, -MaxTilt, MaxTilt)
-            else
-                TargetTilt = 0
-            end
-
-            local TiltRate = Dragging and 20 or 24
-            local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
-            CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * TiltAlpha
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
 
-            UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
-            UI.Rotation = CurrentTilt
+            UI.Position = UDim2.new(BaseScaleX, CurrentPos.X, BaseScaleY, CurrentPos.Y)
+            UI.Rotation = 0
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                if Dist < 0.5 and math.abs(CurrentTilt) < 0.04 then
+                if Dist < 0.25 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     UI.Rotation = 0
                     if IsMainWindow then
@@ -2305,10 +2284,6 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
-        PrevTargetX = CurrentPos.X
-        WindowVelocityX = 0
-        CurrentTilt = 0
-        TargetTilt = 0
 
         local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
         CachedViewportSize = ViewportSize
@@ -2430,67 +2405,63 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
     local InputBegan
     local InputChanged
 
+    local function DisconnectResize()
+        Dragging = false
+        if Changed and Changed.Connected then
+            Changed:Disconnect()
+            Changed = nil
+        end
+        if InputChanged and InputChanged.Connected then
+            InputChanged:Disconnect()
+            InputChanged = nil
+        end
+    end
+
     InputBegan = DragFrame.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) then
             return
         end
 
+        DisconnectResize()
+
         StartPos = Input.Position
         FrameSize = UI.Size
         Dragging = true
 
-        Changed = Input.Changed:Connect(function()
-            if Input.UserInputState ~= Enum.UserInputState.End then
+        InputChanged = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+            if not UI.Visible or not (ScreenGui and ScreenGui.Parent) then
+                DisconnectResize()
                 return
             end
 
-            Dragging = false
-            if Changed and Changed.Connected then
-                Changed:Disconnect()
-                Changed = nil
+            if Dragging and IsHoverInput(MoveInput) then
+                local Delta = MoveInput.Position - StartPos
+                UI.Size = UDim2.new(
+                    FrameSize.X.Scale,
+                    math.clamp(FrameSize.X.Offset + Delta.X, Library.MinSize.X, math.huge),
+                    FrameSize.Y.Scale,
+                    math.clamp(FrameSize.Y.Offset + Delta.Y, Library.MinSize.Y, math.huge)
+                )
+                if Callback then
+                    Library:SafeCallback(Callback)
+                end
+            end
+        end)
+
+        Changed = Input.Changed:Connect(function()
+            if Input.UserInputState == Enum.UserInputState.End then
+                DisconnectResize()
             end
         end)
     end)
 
-    InputChanged = UserInputService.InputChanged:Connect(function(Input: InputObject)
-        if not UI.Visible or not (ScreenGui and ScreenGui.Parent) then
-            Dragging = false
-            if Changed and Changed.Connected then
-                Changed:Disconnect()
-                Changed = nil
-            end
-
-            return
-        end
-
-        if Dragging and IsHoverInput(Input) then
-            local Delta = Input.Position - StartPos
-            UI.Size = UDim2.new(
-                FrameSize.X.Scale,
-                math.clamp(FrameSize.X.Offset + Delta.X, Library.MinSize.X, math.huge),
-                FrameSize.Y.Scale,
-                math.clamp(FrameSize.Y.Offset + Delta.Y, Library.MinSize.Y, math.huge)
-            )
-            if Callback then
-                Library:SafeCallback(Callback)
-            end
-        end
-    end)
-
-    Library:GiveSignal(InputChanged)
     Library:GiveSignal(InputBegan)
 
     UI.Destroying:Once(function()
-        if InputChanged and InputChanged.Connected then
-            InputChanged:Disconnect()
-        end
+        DisconnectResize()
 
         if InputBegan and InputBegan.Connected then
             InputBegan:Disconnect()
-        end
-
-        if Changed and Changed.Connected then
-            Changed:Disconnect()
         end
 
         local IdxChanged = table.find(Library.Signals, InputChanged)
@@ -2702,6 +2673,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
 
     local DragStartPos: UDim2?
     local DragChanged: RBXScriptConnection?
+    local DragMoveConnection: RBXScriptConnection?
     local DragDidMove = false
 
     --// UI Handler
@@ -2947,6 +2919,11 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             DragChanged = nil
         end
 
+        if DragMoveConnection and DragMoveConnection.Connected then
+            DragMoveConnection:Disconnect()
+            DragMoveConnection = nil
+        end
+
         if not WasDragging or not Box.PoppedOut or not Float then
             return
         end
@@ -2978,6 +2955,11 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             return
         end
 
+        if DragMoveConnection and DragMoveConnection.Connected then
+            DragMoveConnection:Disconnect()
+            DragMoveConnection = nil
+        end
+
         DragState = "Holding"
         DragInput = Input
         PressMouse = Vector2.new(Input.Position.X, Input.Position.Y)
@@ -2987,6 +2969,12 @@ function Library:MakeBoxPopOut(Box: any, Options: {
         if Box.PoppedOut and Float then
             RaiseFloat()
         end
+
+        DragMoveConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+            if IsHoverInput(MoveInput) then
+                UpdateDrag(MoveInput)
+            end
+        end)
 
         DragChanged = Input.Changed:Connect(function()
             if Input.UserInputState == Enum.UserInputState.End then
@@ -3062,12 +3050,6 @@ function Library:MakeBoxPopOut(Box: any, Options: {
     Library:GiveSignal(Header.DescendantAdded:Connect(function(Descendant)
         if Descendant:IsA("GuiObject") and not Descendant:IsA("ImageButton") then
             BindDragSource(Descendant)
-        end
-    end))
-
-    Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
-        if IsHoverInput(Input) then
-            UpdateDrag(Input)
         end
     end))
 end
@@ -3362,6 +3344,20 @@ function Library:AddDraggableButton(...)
     local CachedHalfH = 25
     local CachedViewport = Vector2.new(1920, 1080)
 
+    local MoveConnection: RBXScriptConnection? = nil
+    local EndConnection: RBXScriptConnection? = nil
+
+    local function DisconnectDynamicInputs()
+        if MoveConnection then
+            MoveConnection:Disconnect()
+            MoveConnection = nil
+        end
+        if EndConnection then
+            EndConnection:Disconnect()
+            EndConnection = nil
+        end
+    end
+
     local function ResetDragVisual()
         if OutlineStroke then
             OutlineStroke.Color = Library.Scheme.OutlineColor
@@ -3372,7 +3368,7 @@ function Library:AddDraggableButton(...)
         Button.AnchorPoint = OrigAnchor
         local FinalX = CurrentButtonPos.X - CachedHalfW + (OrigAnchor.X * CachedHalfW * 2)
         local FinalY = CurrentButtonPos.Y - CachedHalfH + (OrigAnchor.Y * CachedHalfH * 2)
-        Button.Position = UDim2.fromOffset(math.round(FinalX), math.round(FinalY))
+        Button.Position = UDim2.fromOffset(FinalX, FinalY)
 
         if PhysicsConnection then
             PhysicsConnection:Disconnect()
@@ -3415,7 +3411,7 @@ function Library:AddDraggableButton(...)
             local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
             CurrentBtnTilt = CurrentBtnTilt + (TargetBtnTilt - CurrentBtnTilt) * TiltAlpha
 
-            Button.Position = UDim2.fromOffset(math.round(CurrentButtonPos.X), math.round(CurrentButtonPos.Y))
+            Button.Position = UDim2.fromOffset(CurrentButtonPos.X, CurrentButtonPos.Y)
             Button.Rotation = CurrentBtnTilt
 
             if not IsDragging then
@@ -3425,6 +3421,31 @@ function Library:AddDraggableButton(...)
                 end
             end
         end)
+    end
+
+    local function HandleInputEnded(Input: InputObject)
+        local IsMatch = (Input == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseButton1)
+        if not IsMatch then
+            return
+        end
+
+        DisconnectDynamicInputs()
+        CancelHold()
+
+        if IsDragging then
+            IsDragging = false
+        else
+            local Now = tick()
+            if Now - LastClickTime >= 0.03 then
+                LastClickTime = Now
+                Library:SafeCallback(Func, DraggableButton)
+            end
+        end
+
+        ActiveInput = nil
+        TouchStartPos = nil
+        LatestInputPos = nil
+        DragOffset = nil
     end
 
     table.insert(
@@ -3442,6 +3463,32 @@ function Library:AddDraggableButton(...)
             LatestInputPos = TouchStartPos
             IsDragging = false
             CancelHold()
+
+            DisconnectDynamicInputs()
+
+            MoveConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+                local IsMatch = (MoveInput == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and MoveInput.UserInputType == Enum.UserInputType.MouseMovement)
+                if not IsMatch then
+                    return
+                end
+
+                local InputPos = Vector2.new(MoveInput.Position.X, MoveInput.Position.Y)
+                LatestInputPos = InputPos
+
+                if IsDragging then
+                    local RawCenterX = InputPos.X - (DragOffset and DragOffset.X or 0)
+                    local RawCenterY = InputPos.Y - (DragOffset and DragOffset.Y or 0)
+
+                    TargetButtonPos = Vector2.new(
+                        math.clamp(RawCenterX, CachedHalfW, CachedViewport.X - CachedHalfW),
+                        math.clamp(RawCenterY, CachedHalfH, CachedViewport.Y - CachedHalfH)
+                    )
+                end
+            end)
+
+            EndConnection = UserInputService.InputEnded:Connect(function(EndInput: InputObject)
+                HandleInputEnded(EndInput)
+            end)
 
             if not ExcludeDragging and not Library.CantDragForced then
                 HoldThread = task.delay(0.28, function()
@@ -3463,7 +3510,7 @@ function Library:AddDraggableButton(...)
                         BtnVelocityX = 0
                         CurrentBtnTilt = 0
                         TargetBtnTilt = 0
-                        Button.Position = UDim2.fromOffset(math.round(Center.X), math.round(Center.Y))
+                        Button.Position = UDim2.fromOffset(Center.X, Center.Y)
                         IsDragging = true
 
                         if OutlineStroke then
@@ -3477,57 +3524,6 @@ function Library:AddDraggableButton(...)
         end)
     )
 
-    table.insert(
-        DraggableButton.Connections,
-        UserInputService.InputChanged:Connect(function(Input: InputObject)
-            local IsMatch = (Input == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseMovement)
-            if not IsMatch then
-                return
-            end
-
-            local InputPos = Vector2.new(Input.Position.X, Input.Position.Y)
-            LatestInputPos = InputPos
-
-            if IsDragging then
-                local RawCenterX = InputPos.X - (DragOffset and DragOffset.X or 0)
-                local RawCenterY = InputPos.Y - (DragOffset and DragOffset.Y or 0)
-
-                TargetButtonPos = Vector2.new(
-                    math.clamp(RawCenterX, CachedHalfW, CachedViewport.X - CachedHalfW),
-                    math.clamp(RawCenterY, CachedHalfH, CachedViewport.Y - CachedHalfH)
-                )
-            end
-        end)
-    )
-
-    local function HandleInputEnded(Input: InputObject)
-        local IsMatch = (Input == ActiveInput) or (ActiveInput and ActiveInput.UserInputType == Enum.UserInputType.MouseButton1 and Input.UserInputType == Enum.UserInputType.MouseButton1)
-        if not IsMatch then
-            return
-        end
-
-        CancelHold()
-
-        if IsDragging then
-            IsDragging = false
-        else
-            local Now = tick()
-            if Now - LastClickTime >= 0.03 then
-                LastClickTime = Now
-                Library:SafeCallback(Func, DraggableButton)
-            end
-        end
-
-        ActiveInput = nil
-        TouchStartPos = nil
-        LatestInputPos = nil
-        DragOffset = nil
-    end
-
-    table.insert(
-        DraggableButton.Connections,
-        UserInputService.InputEnded:Connect(HandleInputEnded)
-    )
     table.insert(
         DraggableButton.Connections,
         Button.InputEnded:Connect(HandleInputEnded)
@@ -3559,6 +3555,8 @@ function Library:AddDraggableButton(...)
 
     function DraggableButton:Destroy()
         DraggableButton.Destroyed = true
+
+        DisconnectDynamicInputs()
 
         if PhysicsConnection and PhysicsConnection.Connected then
             PhysicsConnection:Disconnect()
@@ -4205,7 +4203,8 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
 
     local function DoHover()
         if
-            CurrentHoverInstance == HoverInstance
+            Library.IsMobile
+            or CurrentHoverInstance == HoverInstance
             or Library.ActiveDialog
             or (CurrentMenu and Library:MouseIsOverFrame(CurrentMenu.Menu, Mouse))
             or (TooltipTable.Disabled and typeof(DisabledInfoStr) ~= "string")
@@ -11148,11 +11147,11 @@ function Library:CreateWindow(WindowInfo)
             Position = UDim2.fromScale(0, 0),
             Size = UDim2.fromScale(1, 1),
             ScaleType = Enum.ScaleType.Stretch,
-            ZIndex = Overlay.ZIndex + 1,
+            ZIndex = 1,
             BackgroundTransparency = 1,
             ImageTransparency = 0.75,
-            Visible = false,
-            Parent = ScreenGui,
+            Visible = HasBackgroundImage,
+            Parent = MainFrame,
         })
         if BackgroundIcon then
             Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
@@ -11165,28 +11164,6 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BackgroundImage,
             })
         )
-
-        Library:GiveSignal(RunService.RenderStepped:Connect(function()
-            if not (BackgroundImage and MainFrame) then
-                return
-            end
-
-            local ShouldShow = HasBackgroundImage and MainFrame.Visible
-            BackgroundImage.Visible = ShouldShow
-
-            if not ShouldShow then
-                return
-            end
-
-            BackgroundImage.Position = UDim2.fromOffset(
-                MainFrame.AbsolutePosition.X,
-                MainFrame.AbsolutePosition.Y
-            )
-            BackgroundImage.Size = UDim2.fromOffset(
-                MainFrame.AbsoluteSize.X,
-                MainFrame.AbsoluteSize.Y
-            )
-        end))
 
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
@@ -11480,12 +11457,12 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Container \\--
-        Container = New("CanvasGroup", {
+        Container = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
-            GroupTransparency = 0,
+            BorderSizePixel = 0,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
@@ -11576,6 +11553,9 @@ function Library:CreateWindow(WindowInfo)
         end
 
         HasBackgroundImage = ValidIcon
+        if BackgroundImage then
+            BackgroundImage.Visible = ValidIcon
+        end
         WindowInfo.BackgroundImage = Image
     end
 
@@ -14156,80 +14136,68 @@ function Library:CreateWindow(WindowInfo)
         end
 
         local BaseScale = GetBaseScale()
+        if WindowScale then
+            WindowScale.Scale = BaseScale
+        end
+
         local Animate = (WindowInfo.Animations and WindowInfo.Animations.ToggleWindow ~= false)
             or (Library.Animations and Library.Animations.ToggleWindow ~= false)
 
-        if Animate and WindowScale and MainFrame then
+        if Animate and MainFrame then
             for _, Tween in ActiveToggleTweens do
                 pcall(function() Tween:Cancel() end)
             end
             table.clear(ActiveToggleTweens)
 
-            local ScaleRatio = 0.86
             local TargetPos = SavedWindowPosition or MainFrame.Position
             SavedWindowPosition = TargetPos
-
-            local HalfW = (MainFrame.Size.X.Offset * (1 - ScaleRatio) * BaseScale) / 2
-            local HalfH = (MainFrame.Size.Y.Offset * (1 - ScaleRatio) * BaseScale) / 2
 
             if Library.Toggled then
                 local StartPos = UDim2.new(
                     TargetPos.X.Scale,
-                    TargetPos.X.Offset + HalfW,
+                    TargetPos.X.Offset,
                     TargetPos.Y.Scale,
-                    TargetPos.Y.Offset + HalfH + 12
+                    TargetPos.Y.Offset + 10
                 )
 
-                if not MainFrame.Visible or WindowScale.Scale <= (BaseScale * 0.88) then
-                    WindowScale.Scale = BaseScale * ScaleRatio
-                    MainFrame.Position = StartPos
-                end
-
+                MainFrame.Position = StartPos
                 MainFrame.Visible = true
 
-                local OpenTweenInfo = TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-                local ScaleTween = TweenService:Create(WindowScale, OpenTweenInfo, { Scale = BaseScale })
-                local PosTween = TweenService:Create(MainFrame, OpenTweenInfo, { Position = TargetPos })
-
-                table.insert(ActiveToggleTweens, ScaleTween)
-                table.insert(ActiveToggleTweens, PosTween)
-
-                ScaleTween:Play()
-                PosTween:Play()
+                local OpenTween = TweenService:Create(
+                    MainFrame,
+                    TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    { Position = TargetPos }
+                )
+                table.insert(ActiveToggleTweens, OpenTween)
+                OpenTween:Play()
             else
                 local EndPos = UDim2.new(
                     TargetPos.X.Scale,
-                    TargetPos.X.Offset + HalfW,
+                    TargetPos.X.Offset,
                     TargetPos.Y.Scale,
-                    TargetPos.Y.Offset + HalfH + 10
+                    TargetPos.Y.Offset + 8
                 )
-
-                local CloseTweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-                local ScaleTween = TweenService:Create(WindowScale, CloseTweenInfo, { Scale = BaseScale * ScaleRatio })
-                local PosTween = TweenService:Create(MainFrame, CloseTweenInfo, { Position = EndPos })
-
-                table.insert(ActiveToggleTweens, ScaleTween)
-                table.insert(ActiveToggleTweens, PosTween)
 
                 local CloseId = tick()
                 ActiveCloseTweenId = CloseId
 
-                ScaleTween:Play()
-                PosTween:Play()
+                local CloseTween = TweenService:Create(
+                    MainFrame,
+                    TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                    { Position = EndPos }
+                )
+                table.insert(ActiveToggleTweens, CloseTween)
+                CloseTween:Play()
 
-                ScaleTween.Completed:Once(function()
+                CloseTween.Completed:Once(function()
                     if ActiveCloseTweenId == CloseId and not Library.Toggled then
                         MainFrame.Visible = false
                         MainFrame.Position = TargetPos
-                        WindowScale.Scale = BaseScale
                     end
                 end)
             end
         else
             MainFrame.Visible = Library.Toggled
-            if WindowScale then
-                WindowScale.Scale = BaseScale
-            end
             if SavedWindowPosition then
                 MainFrame.Position = SavedWindowPosition
             end
@@ -14239,23 +14207,25 @@ function Library:CreateWindow(WindowInfo)
             ModalElement.Modal = Library.Toggled
         end
 
-        if Library.Toggled and not Library.IsMobile then
+        if Library.Toggled and not Library.IsMobile and Library.ShowCustomCursor then
             local ShowCursorBinding = Library.ShowCursorBinding
             Library.OriginalMouseIconEnabled = UserInputService.MouseIconEnabled
+            UserInputService.MouseIconEnabled = false
 
             pcall(function() RunService:UnbindFromRenderStep(ShowCursorBinding) end)
             RunService:BindToRenderStep(ShowCursorBinding, Enum.RenderPriority.Last.Value, function()
-                UserInputService.MouseIconEnabled = not Library.ShowCustomCursor
-
                 Cursor.Position = UDim2.fromOffset(Mouse.X, Mouse.Y)
-                Cursor.Visible = Library.ShowCustomCursor
+                Cursor.Visible = true
 
                 if Library.Unloaded == true or not (Library.Toggled and ScreenGui and ScreenGui.Parent) then
                     RestoreMouseIcon()
                 end
             end)
-        elseif not Library.Toggled then
+        else
             RestoreMouseIcon()
+        end
+
+        if not Library.Toggled then
             TooltipLabel.Visible = false
 
             for _, Option in Library.Options do
@@ -14278,6 +14248,24 @@ function Library:CreateWindow(WindowInfo)
         local StartPos, StartWidth
         local Dragging = false
         local Changed
+        local SidebarMoveConnection: RBXScriptConnection? = nil
+
+        local function DisconnectSidebarDrag()
+            Dragging = false
+            Library.CantDragForced = false
+            TweenService:Create(DividerLine, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.OutlineColor,
+            }):Play()
+
+            if Changed and Changed.Connected then
+                Changed:Disconnect()
+                Changed = nil
+            end
+            if SidebarMoveConnection and SidebarMoveConnection.Connected then
+                SidebarMoveConnection:Disconnect()
+                SidebarMoveConnection = nil
+            end
+        end
 
         local SidebarGrabber = New("TextButton", {
             AnchorPoint = Vector2.new(0.5, 0),
@@ -14306,57 +14294,42 @@ function Library:CreateWindow(WindowInfo)
                 return
             end
 
-            Library.CantDragForced = true
+            DisconnectSidebarDrag()
 
+            Library.CantDragForced = true
             StartPos = Input.Position
             StartWidth = Window:GetSidebarWidth()
             Dragging = true
 
-            Changed = Input.Changed:Connect(function()
-                if Input.UserInputState ~= Enum.UserInputState.End then
+            SidebarMoveConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+                if not Library.Toggled or not (ScreenGui and ScreenGui.Parent) then
+                    DisconnectSidebarDrag()
                     return
                 end
 
-                Library.CantDragForced = false
-                TweenService:Create(DividerLine, Library.TweenInfo, {
-                    BackgroundColor3 = Library.Scheme.OutlineColor,
-                }):Play()
+                if Dragging and IsHoverInput(MoveInput) then
+                    local Delta = MoveInput.Position - StartPos
+                    local Width = StartWidth + Delta.X
 
-                Dragging = false
-                if Changed and Changed.Connected then
-                    Changed:Disconnect()
-                    Changed = nil
+                    if WindowInfo.DisableCompactingSnap then
+                        Window:SetSidebarWidth(Width)
+                        return
+                    end
+
+                    if Width > Threshold then
+                        Window:SetSidebarWidth(math.max(Width, WindowInfo.MinSidebarWidth))
+                    else
+                        Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
+                    end
+                end
+            end)
+
+            Changed = Input.Changed:Connect(function()
+                if Input.UserInputState == Enum.UserInputState.End then
+                    DisconnectSidebarDrag()
                 end
             end)
         end)
-
-        Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
-            if not Library.Toggled or not (ScreenGui and ScreenGui.Parent) then
-                Dragging = false
-                if Changed and Changed.Connected then
-                    Changed:Disconnect()
-                    Changed = nil
-                end
-
-                return
-            end
-
-            if Dragging and IsHoverInput(Input) then
-                local Delta = Input.Position - StartPos
-                local Width = StartWidth + Delta.X
-
-                if WindowInfo.DisableCompactingSnap then
-                    Window:SetSidebarWidth(Width)
-                    return
-                end
-
-                if Width > Threshold then
-                    Window:SetSidebarWidth(math.max(Width, WindowInfo.MinSidebarWidth))
-                else
-                    Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
-                end
-            end
-        end))
     end
 
     Window:SetAlwaysOnTop(WindowInfo.AlwaysOnTop)
