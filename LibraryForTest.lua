@@ -432,13 +432,6 @@ local Templates = {
         --// Background \\--
         BackgroundImage = "",
 
-        --// Profile \\--
-        ShowProfile = true,
-        ProfileName = nil,
-        ProfileUsername = nil,
-        ProfileIcon = nil,
-        CensorProfile = true,
-
         --// Animations \\--
         Animations = {
             ToggleWindow = true,
@@ -11097,20 +11090,6 @@ function Library:CreateWindow(WindowInfo)
     local TopBar
     local TitleTextHolder
     local TitleHolderPadding
-    local ProfileHolder
-    local ProfileLine
-    local ProfileAvatar
-    local ProfileTextHolder
-    local ProfileDisplayName
-    local ProfileUsername
-    local ProfileTrigger
-    local RealDisplayName = ""
-    local RealUsername = ""
-    local IsProfileCensored = WindowInfo.CensorProfile ~= false
-    local UpdateProfileDisplay
-    local ProfileHeight = 50
-    local HasProfile = WindowInfo.ShowProfile ~= false
-    local TabsBottomOffset = HasProfile and (49 + ProfileHeight + 1) or 49
     local WindowSnapConfig = {
         Enabled = WindowInfo.Snapping,
         Distance = WindowInfo.SnapDistance,
@@ -11446,262 +11425,6 @@ function Library:CreateWindow(WindowInfo)
             end)
         end
 
-        --// Profile \\--
-        if HasProfile then
-            local PlayerUserId = if LocalPlayer then LocalPlayer.UserId else 0
-            local PlayerDisplayName = WindowInfo.ProfileName or (if LocalPlayer then LocalPlayer.DisplayName else "Player")
-            local PlayerName = WindowInfo.ProfileUsername or (if LocalPlayer then LocalPlayer.Name else "Player")
-            local AvatarThumbnail = if PlayerUserId > 0
-                then string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", PlayerUserId)
-                else ""
-
-            ProfileHolder = New("Frame", {
-                AnchorPoint = Vector2.new(0, 1),
-                BackgroundTransparency = 1,
-                Position = UDim2.fromScale(0, 1),
-                Size = UDim2.new(0, InitialLeftWidth, 0, ProfileHeight),
-                ClipsDescendants = true,
-                Parent = MainFrame,
-            })
-
-            ProfileLine = Library:MakeLine(MainFrame, {
-                AnchorPoint = Vector2.new(0, 1),
-                Position = UDim2.new(0, 0, 1, -ProfileHeight),
-                Size = UDim2.new(0, InitialLeftWidth, 0, 1),
-            })
-
-            ProfileAvatar = New("ImageLabel", {
-                AnchorPoint = Vector2.new(0, 0.5),
-                BackgroundColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-                end,
-                BackgroundTransparency = 0,
-                Position = UDim2.new(0, 8, 0.5, 0),
-                Size = UDim2.fromOffset(36, 36),
-                Image = AvatarThumbnail,
-                Parent = ProfileHolder,
-            })
-            New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = ProfileAvatar,
-            })
-            New("UIStroke", {
-                Color = "OutlineColor",
-                Thickness = 1.2,
-                Parent = ProfileAvatar,
-            })
-
-            if WindowInfo.ProfileIcon then
-                local CustomIcon = Library:GetCustomIcon(WindowInfo.ProfileIcon)
-                if CustomIcon then
-                    Library:ApplyLucideIcon(ProfileAvatar, CustomIcon)
-                else
-                    ProfileAvatar.Image = tostring(WindowInfo.ProfileIcon)
-                end
-            elseif PlayerUserId > 0 then
-                task.spawn(function()
-                    local thumbSuccess, thumbUrl = pcall(function()
-                        return Players:GetUserThumbnailAsync(
-                            PlayerUserId,
-                            Enum.ThumbnailType.HeadShot,
-                            Enum.ThumbnailSize.Size150x150
-                        )
-                    end)
-                    if thumbSuccess and thumbUrl and ProfileAvatar and ProfileAvatar.Parent then
-                        ProfileAvatar.Image = thumbUrl
-                    end
-                end)
-            end
-
-            ProfileTextHolder = New("Frame", {
-                AnchorPoint = Vector2.new(0, 0.5),
-                BackgroundTransparency = 1,
-                Position = UDim2.new(0, 52, 0.5, 0),
-                Size = UDim2.new(1, -58, 0, 34),
-                ClipsDescendants = true,
-                Parent = ProfileHolder,
-            })
-
-            New("UIListLayout", {
-                FillDirection = Enum.FillDirection.Vertical,
-                HorizontalAlignment = Enum.HorizontalAlignment.Left,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 1),
-                Parent = ProfileTextHolder,
-            })
-
-            RealDisplayName = PlayerDisplayName
-            RealUsername = if PlayerName:sub(1, 1) == "@" then PlayerName else ("@" .. PlayerName)
-
-            ProfileDisplayName = New("TextLabel", {
-                BackgroundTransparency = 1,
-                FontFace = "Font",
-                Size = UDim2.new(1, 0, 0, 16),
-                Text = RealDisplayName,
-                TextColor3 = "FontColor",
-                TextSize = 14,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 2,
-                Parent = ProfileTextHolder,
-            })
-
-            ProfileUsername = New("TextLabel", {
-                BackgroundTransparency = 1,
-                FontFace = "Font",
-                Size = UDim2.new(1, 0, 0, 14),
-                Text = RealUsername,
-                TextColor3 = function()
-                    return Library:GetDarkerColor(Library.Scheme.FontColor)
-                end,
-                TextSize = 12,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 2,
-                Parent = ProfileTextHolder,
-            })
-
-            local DisplayBlurStroke = New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "FontColor",
-                Enabled = false,
-                Thickness = 2.4,
-                Transparency = 0.35,
-                Parent = ProfileDisplayName,
-            })
-
-            local DisplayGlow = New("TextLabel", {
-                Active = false,
-                Selectable = false,
-                BackgroundTransparency = 1,
-                FontFace = "Font",
-                Position = UDim2.fromScale(0, 0),
-                Size = UDim2.fromScale(1, 1),
-                Text = "",
-                TextColor3 = "FontColor",
-                TextSize = 14,
-                TextTransparency = 0.65,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Visible = false,
-                ZIndex = 1,
-                Parent = ProfileDisplayName,
-            })
-
-            local DisplayGlowStroke = New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = "FontColor",
-                Enabled = true,
-                Thickness = 4.5,
-                Transparency = 0.6,
-                Parent = DisplayGlow,
-            })
-
-            local UsernameBlurStroke = New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = function()
-                    return Library:GetDarkerColor(Library.Scheme.FontColor)
-                end,
-                Enabled = false,
-                Thickness = 2,
-                Transparency = 0.4,
-                Parent = ProfileUsername,
-            })
-
-            local UsernameGlow = New("TextLabel", {
-                Active = false,
-                Selectable = false,
-                BackgroundTransparency = 1,
-                FontFace = "Font",
-                Position = UDim2.fromScale(0, 0),
-                Size = UDim2.fromScale(1, 1),
-                Text = "",
-                TextColor3 = function()
-                    return Library:GetDarkerColor(Library.Scheme.FontColor)
-                end,
-                TextSize = 12,
-                TextTransparency = 0.65,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Visible = false,
-                ZIndex = 1,
-                Parent = ProfileUsername,
-            })
-
-            local UsernameGlowStroke = New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-                Color = function()
-                    return Library:GetDarkerColor(Library.Scheme.FontColor)
-                end,
-                Enabled = true,
-                Thickness = 4,
-                Transparency = 0.65,
-                Parent = UsernameGlow,
-            })
-
-            UpdateProfileDisplay = function()
-                if not ProfileDisplayName or not ProfileUsername then
-                    return
-                end
-
-                if IsProfileCensored then
-                    local DisplayMaskCount = math.clamp(utf8.len(RealDisplayName) or #RealDisplayName, 6, 12)
-                    local DisplayMasked = string.rep("•", DisplayMaskCount)
-
-                    local UsernameClean = RealUsername:gsub("^@", "")
-                    local UsernameMaskCount = math.clamp(utf8.len(UsernameClean) or #UsernameClean, 6, 12)
-                    local UsernameMasked = "@" .. string.rep("•", UsernameMaskCount)
-
-                    ProfileDisplayName.Text = DisplayMasked
-                    ProfileDisplayName.TextTransparency = 0.45
-                    DisplayBlurStroke.Enabled = true
-                    DisplayGlow.Text = DisplayMasked
-                    DisplayGlow.Visible = true
-
-                    ProfileUsername.Text = UsernameMasked
-                    ProfileUsername.TextTransparency = 0.45
-                    UsernameBlurStroke.Enabled = true
-                    UsernameGlow.Text = UsernameMasked
-                    UsernameGlow.Visible = true
-                    return
-                end
-
-                ProfileDisplayName.Text = RealDisplayName
-                ProfileDisplayName.TextTransparency = 0
-                DisplayBlurStroke.Enabled = false
-                DisplayGlow.Visible = false
-
-                ProfileUsername.Text = RealUsername
-                ProfileUsername.TextTransparency = 0
-                UsernameBlurStroke.Enabled = false
-                UsernameGlow.Visible = false
-            end
-
-            UpdateProfileDisplay()
-
-            ProfileTrigger = New("TextButton", {
-                Active = true,
-                AutoButtonColor = false,
-                BackgroundTransparency = 1,
-                Position = UDim2.fromScale(0, 0),
-                Size = UDim2.fromScale(1, 1),
-                Text = "",
-                ZIndex = 4,
-                Parent = ProfileHolder,
-            })
-
-            ProfileTrigger.MouseButton1Click:Connect(function()
-                IsProfileCensored = not IsProfileCensored
-                UpdateProfileDisplay()
-            end)
-
-            if IsCompact then
-                ProfileTextHolder.Visible = false
-                ProfileAvatar.AnchorPoint = Vector2.new(0.5, 0.5)
-                ProfileAvatar.Position = UDim2.new(0.5, 0, 0.5, 0)
-            end
-        end
-
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -11709,7 +11432,7 @@ function Library:CreateWindow(WindowInfo)
             CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
-            Size = UDim2.new(0, InitialLeftWidth, 1, -TabsBottomOffset),
+            Size = UDim2.new(0, InitialLeftWidth, 1, -49),
             Parent = MainFrame,
         })
         TabsCorner = New("UICorner", {
@@ -11850,51 +11573,6 @@ function Library:CreateWindow(WindowInfo)
         FooterLabel.Visible = HasValidFooter
         WindowTitle.Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24)
         WindowTitle.TextSize = if HasValidFooter then 16 else 19
-    end
-
-    function Window:SetProfile(ProfileConfig: { [string]: any })
-        if not ProfileHolder or typeof(ProfileConfig) ~= "table" then
-            return
-        end
-
-        if ProfileConfig.Name or ProfileConfig.DisplayName then
-            RealDisplayName = tostring(ProfileConfig.Name or ProfileConfig.DisplayName)
-        end
-        if ProfileConfig.Username then
-            local RawUsername = tostring(ProfileConfig.Username)
-            RealUsername = if RawUsername:sub(1, 1) == "@" then RawUsername else ("@" .. RawUsername)
-        end
-        if ProfileConfig.Censor ~= nil then
-            IsProfileCensored = ProfileConfig.Censor == true
-        end
-        if UpdateProfileDisplay then
-            UpdateProfileDisplay()
-        end
-
-        if ProfileConfig.Icon then
-            local CustomIcon = Library:GetCustomIcon(ProfileConfig.Icon)
-            if CustomIcon then
-                Library:ApplyLucideIcon(ProfileAvatar, CustomIcon)
-            else
-                ProfileAvatar.Image = tostring(ProfileConfig.Icon)
-            end
-        end
-        if ProfileConfig.Visible ~= nil then
-            HasProfile = ProfileConfig.Visible == true
-            ProfileHolder.Visible = HasProfile
-            if ProfileLine then
-                ProfileLine.Visible = HasProfile
-            end
-            TabsBottomOffset = if HasProfile then (49 + ProfileHeight + 1) else 49
-            Tabs.Size = UDim2.new(0, Window:GetSidebarWidth(), 1, -TabsBottomOffset)
-        end
-    end
-
-    function Window:SetCensorProfile(State: boolean)
-        IsProfileCensored = State == true
-        if UpdateProfileDisplay then
-            UpdateProfileDisplay()
-        end
     end
 
     function Window:SetAlwaysOnTop(Enabled: boolean)
@@ -12058,17 +11736,6 @@ function Library:CreateWindow(WindowInfo)
             WindowIcon.Visible = IsCompact
         end
 
-        if ProfileHolder then
-            ProfileTextHolder.Visible = not IsCompact
-            if IsCompact then
-                ProfileAvatar.AnchorPoint = Vector2.new(0.5, 0.5)
-                ProfileAvatar.Position = UDim2.new(0.5, 0, 0.5, 0)
-            else
-                ProfileAvatar.AnchorPoint = Vector2.new(0, 0.5)
-                ProfileAvatar.Position = UDim2.new(0, 8, 0.5, 0)
-            end
-        end
-
         for _, Button in Library.TabButtons do
             if not Button.Icon then
                 continue
@@ -12103,15 +11770,8 @@ function Library:CreateWindow(WindowInfo)
 
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
-        Tabs.Size = UDim2.new(0, Width, 1, -TabsBottomOffset)
+        Tabs.Size = UDim2.new(0, Width, 1, -49)
         Container.Size = UDim2.new(1, -Width - 1, 1, -49)
-
-        if ProfileHolder then
-            ProfileHolder.Size = UDim2.new(0, Width, 0, ProfileHeight)
-            if ProfileLine then
-                ProfileLine.Size = UDim2.new(0, Width, 0, 1)
-            end
-        end
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
