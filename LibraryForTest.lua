@@ -11107,7 +11107,6 @@ function Library:CreateWindow(WindowInfo)
     local RealDisplayName = ""
     local RealUsername = ""
     local IsProfileCensored = WindowInfo.CensorProfile ~= false
-    local IsProfileHovered = false
     local UpdateProfileDisplay
     local ProfileHeight = 50
     local HasProfile = WindowInfo.ShowProfile ~= false
@@ -11562,148 +11561,120 @@ function Library:CreateWindow(WindowInfo)
                 Parent = ProfileTextHolder,
             })
 
-            local DisplayPill = New("Frame", {
+            local DisplayBlurStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "FontColor",
+                Enabled = false,
+                Thickness = 2.4,
+                Transparency = 0.35,
+                Parent = ProfileDisplayName,
+            })
+
+            local DisplayGlow = New("TextLabel", {
                 Active = false,
-                BackgroundColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 5)
-                end,
-                BackgroundTransparency = 0.45,
-                Position = UDim2.fromOffset(-3, -1),
-                Size = UDim2.new(0.8, 6, 1, 2),
+                Selectable = false,
+                BackgroundTransparency = 1,
+                FontFace = "Font",
+                Position = UDim2.fromScale(0, 0),
+                Size = UDim2.fromScale(1, 1),
+                Text = "",
+                TextColor3 = "FontColor",
+                TextSize = 14,
+                TextTransparency = 0.65,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = false,
                 ZIndex = 1,
                 Parent = ProfileDisplayName,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = DisplayPill,
+
+            local DisplayGlowStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "FontColor",
+                Enabled = true,
+                Thickness = 4.5,
+                Transparency = 0.6,
+                Parent = DisplayGlow,
             })
 
-            local UsernamePill = New("Frame", {
-                Active = false,
-                BackgroundColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 5)
+            local UsernameBlurStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = function()
+                    return Library:GetDarkerColor(Library.Scheme.FontColor)
                 end,
-                BackgroundTransparency = 0.45,
-                Position = UDim2.fromOffset(-3, -1),
-                Size = UDim2.new(0.7, 6, 1, 2),
+                Enabled = false,
+                Thickness = 2,
+                Transparency = 0.4,
+                Parent = ProfileUsername,
+            })
+
+            local UsernameGlow = New("TextLabel", {
+                Active = false,
+                Selectable = false,
+                BackgroundTransparency = 1,
+                FontFace = "Font",
+                Position = UDim2.fromScale(0, 0),
+                Size = UDim2.fromScale(1, 1),
+                Text = "",
+                TextColor3 = function()
+                    return Library:GetDarkerColor(Library.Scheme.FontColor)
+                end,
+                TextSize = 12,
+                TextTransparency = 0.65,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = false,
                 ZIndex = 1,
                 Parent = ProfileUsername,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 4),
-                Parent = UsernamePill,
+
+            local UsernameGlowStroke = New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = function()
+                    return Library:GetDarkerColor(Library.Scheme.FontColor)
+                end,
+                Enabled = true,
+                Thickness = 4,
+                Transparency = 0.65,
+                Parent = UsernameGlow,
             })
-
-            local BlurOffsets = {
-                Vector2.new(-1.5, 0),
-                Vector2.new(1.5, 0),
-                Vector2.new(0, -1.5),
-                Vector2.new(0, 1.5),
-                Vector2.new(-1, -1),
-                Vector2.new(1, 1),
-                Vector2.new(-1, 1),
-                Vector2.new(1, -1),
-            }
-
-            local DisplayBlurLabels = {}
-            local UsernameBlurLabels = {}
-
-            for _, Offset in BlurOffsets do
-                local DisplayBlur = New("TextLabel", {
-                    Active = false,
-                    Selectable = false,
-                    BackgroundTransparency = 1,
-                    FontFace = "Font",
-                    Position = UDim2.fromOffset(Offset.X, Offset.Y),
-                    Size = UDim2.fromScale(1, 1),
-                    Text = "",
-                    TextColor3 = "FontColor",
-                    TextSize = 14,
-                    TextTransparency = 0.6,
-                    TextTruncate = Enum.TextTruncate.AtEnd,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Visible = false,
-                    ZIndex = 1,
-                    Parent = ProfileDisplayName,
-                })
-                table.insert(DisplayBlurLabels, DisplayBlur)
-
-                local UsernameBlur = New("TextLabel", {
-                    Active = false,
-                    Selectable = false,
-                    BackgroundTransparency = 1,
-                    FontFace = "Font",
-                    Position = UDim2.fromOffset(Offset.X, Offset.Y),
-                    Size = UDim2.fromScale(1, 1),
-                    Text = "",
-                    TextColor3 = function()
-                        return Library:GetDarkerColor(Library.Scheme.FontColor)
-                    end,
-                    TextSize = 12,
-                    TextTransparency = 0.6,
-                    TextTruncate = Enum.TextTruncate.AtEnd,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Visible = false,
-                    ZIndex = 1,
-                    Parent = ProfileUsername,
-                })
-                table.insert(UsernameBlurLabels, UsernameBlur)
-            end
 
             UpdateProfileDisplay = function()
                 if not ProfileDisplayName or not ProfileUsername then
                     return
                 end
 
-                local ShouldCensor = IsProfileCensored and not IsProfileHovered
-                if ShouldCensor then
+                if IsProfileCensored then
                     local DisplayMaskCount = math.clamp(utf8.len(RealDisplayName) or #RealDisplayName, 6, 12)
-                    local DisplayMasked = string.rep("*", DisplayMaskCount)
+                    local DisplayMasked = string.rep("•", DisplayMaskCount)
 
                     local UsernameClean = RealUsername:gsub("^@", "")
                     local UsernameMaskCount = math.clamp(utf8.len(UsernameClean) or #UsernameClean, 6, 12)
-                    local UsernameMasked = "@" .. string.rep("*", UsernameMaskCount)
+                    local UsernameMasked = "@" .. string.rep("•", UsernameMaskCount)
 
                     ProfileDisplayName.Text = DisplayMasked
-                    ProfileDisplayName.TextTransparency = 0.35
+                    ProfileDisplayName.TextTransparency = 0.45
+                    DisplayBlurStroke.Enabled = true
+                    DisplayGlow.Text = DisplayMasked
+                    DisplayGlow.Visible = true
 
                     ProfileUsername.Text = UsernameMasked
-                    ProfileUsername.TextTransparency = 0.35
-
-                    DisplayPill.Size = UDim2.new(0, math.clamp(DisplayMaskCount * 9 + 8, 50, 120), 1, 2)
-                    DisplayPill.Visible = true
-
-                    UsernamePill.Size = UDim2.new(0, math.clamp(UsernameMaskCount * 8 + 14, 50, 120), 1, 2)
-                    UsernamePill.Visible = true
-
-                    for _, BlurLabel in DisplayBlurLabels do
-                        BlurLabel.Text = DisplayMasked
-                        BlurLabel.Visible = true
-                    end
-                    for _, BlurLabel in UsernameBlurLabels do
-                        BlurLabel.Text = UsernameMasked
-                        BlurLabel.Visible = true
-                    end
+                    ProfileUsername.TextTransparency = 0.45
+                    UsernameBlurStroke.Enabled = true
+                    UsernameGlow.Text = UsernameMasked
+                    UsernameGlow.Visible = true
                     return
                 end
 
                 ProfileDisplayName.Text = RealDisplayName
                 ProfileDisplayName.TextTransparency = 0
+                DisplayBlurStroke.Enabled = false
+                DisplayGlow.Visible = false
 
                 ProfileUsername.Text = RealUsername
                 ProfileUsername.TextTransparency = 0
-
-                DisplayPill.Visible = false
-                UsernamePill.Visible = false
-
-                for _, BlurLabel in DisplayBlurLabels do
-                    BlurLabel.Visible = false
-                end
-                for _, BlurLabel in UsernameBlurLabels do
-                    BlurLabel.Visible = false
-                end
+                UsernameBlurStroke.Enabled = false
+                UsernameGlow.Visible = false
             end
 
             UpdateProfileDisplay()
@@ -11719,21 +11690,9 @@ function Library:CreateWindow(WindowInfo)
                 Parent = ProfileHolder,
             })
 
-            ProfileTrigger.MouseEnter:Connect(function()
-                IsProfileHovered = true
-                UpdateProfileDisplay()
-            end)
-
-            ProfileTrigger.MouseLeave:Connect(function()
-                IsProfileHovered = false
-                UpdateProfileDisplay()
-            end)
-
             ProfileTrigger.MouseButton1Click:Connect(function()
-                if Library.IsMobile then
-                    IsProfileHovered = not IsProfileHovered
-                    UpdateProfileDisplay()
-                end
+                IsProfileCensored = not IsProfileCensored
+                UpdateProfileDisplay()
             end)
 
             if IsCompact then
