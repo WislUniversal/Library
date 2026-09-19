@@ -176,6 +176,7 @@ local Library = {
     Window = nil,
     WindowContainer = nil,
     WindowTabsFrame = nil,
+    SavedWindowPosition = nil,
 
     --// Search \\--
     SearchText = "",
@@ -2212,11 +2213,6 @@ function Library:MakeDraggable(
 
     local CurrentPos = Vector2.new(0, 0)
     local TargetPos = Vector2.new(0, 0)
-    local PrevTargetX = 0
-    local VelocityX = 0
-    local CurrentTilt = 0
-    local TargetTilt = 0
-    local MaxTilt = 2.4
 
     local CachedViewportSize = Vector2.new(1920, 1080)
     local CachedElemSize = Vector2.new(600, 400)
@@ -2275,6 +2271,10 @@ function Library:MakeDraggable(
         Dragging = false
         HideSnapGuides()
 
+        if IsMainWindow and FramePos then
+            Library.SavedWindowPosition = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
+        end
+
         if MoveConnection then
             MoveConnection:Disconnect()
             MoveConnection = nil
@@ -2291,17 +2291,11 @@ function Library:MakeDraggable(
                 PhysicsConnection:Disconnect()
                 PhysicsConnection = nil
             end
-            CurrentTilt = 0
-            TargetTilt = 0
-            VelocityX = 0
             UI.Rotation = 0
-            if IsMainWindow then
-                Library:RestoreDragCulling()
-            end
             if FramePos then
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
-                    SavedWindowPosition = UI.Position
+                    Library.SavedWindowPosition = UI.Position
                 end
             end
         end
@@ -2315,39 +2309,23 @@ function Library:MakeDraggable(
         PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
             local dtClamped = math.clamp(dt, 0.001, 0.05)
 
-            local FollowRate = Dragging and 26 or 20
+            local FollowRate = Dragging and 32 or 24
             local PosAlpha = 1 - math.exp(-FollowRate * dtClamped)
             CurrentPos = CurrentPos + (TargetPos - CurrentPos) * PosAlpha
-
-            local InstantVelX = (TargetPos.X - PrevTargetX) / dtClamped
-            PrevTargetX = TargetPos.X
-            local VelAlpha = 1 - math.exp(-16 * dtClamped)
-            VelocityX = VelocityX + (InstantVelX - VelocityX) * VelAlpha
-
-            if Dragging then
-                TargetTilt = math.clamp(VelocityX * 0.0018, -MaxTilt, MaxTilt)
-            else
-                TargetTilt = 0
-            end
-
-            local TiltRate = Dragging and 20 or 24
-            local TiltAlpha = 1 - math.exp(-TiltRate * dtClamped)
-            CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * TiltAlpha
 
             local BaseScaleX = FramePos and FramePos.X.Scale or 0
             local BaseScaleY = FramePos and FramePos.Y.Scale or 0
 
-            UI.Position = UDim2.new(BaseScaleX, CurrentPos.X, BaseScaleY, CurrentPos.Y)
-            UI.Rotation = CurrentTilt
+            UI.Position = UDim2.new(BaseScaleX, math.round(CurrentPos.X), BaseScaleY, math.round(CurrentPos.Y))
+            UI.Rotation = 0
 
             if not Dragging then
                 local Dist = (CurrentPos - TargetPos).Magnitude
-                if Dist < 0.25 and math.abs(CurrentTilt) < 0.02 then
+                if Dist < 0.5 then
                     UI.Position = UDim2.new(BaseScaleX, TargetPos.X, BaseScaleY, TargetPos.Y)
                     UI.Rotation = 0
                     if IsMainWindow then
-                        SavedWindowPosition = UI.Position
-                        Library:RestoreDragCulling()
+                        Library.SavedWindowPosition = UI.Position
                     end
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
@@ -2368,15 +2346,7 @@ function Library:MakeDraggable(
 
         CurrentPos = Vector2.new(FramePos.X.Offset, FramePos.Y.Offset)
         TargetPos = CurrentPos
-        PrevTargetX = CurrentPos.X
-        VelocityX = 0
-        CurrentTilt = UI.Rotation
-        TargetTilt = 0
-
-        if IsMainWindow then
-            Library:RestoreDragCulling()
-            Library:ApplyDragCulling()
-        end
+        UI.Rotation = 0
 
         local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
         CachedViewportSize = ViewportSize
@@ -2445,6 +2415,9 @@ function Library:MakeDraggable(
             end
 
             TargetPos = Vector2.new(NewX, NewY)
+            if IsMainWindow and FramePos then
+                Library.SavedWindowPosition = UDim2.new(FramePos.X.Scale, NewX, FramePos.Y.Scale, NewY)
+            end
         end)
 
         EndConnection = UserInputService.InputEnded:Connect(function(EndInput: InputObject)
@@ -11160,7 +11133,6 @@ function Library:CreateWindow(WindowInfo)
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
     local WindowScale
-    local SavedWindowPosition = nil
     local ActiveToggleTweens = {}
     local ActiveCloseTweenId = 0
     local DividerLine
@@ -11265,7 +11237,7 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
-        SavedWindowPosition = MainFrame.Position
+        Library.SavedWindowPosition = MainFrame.Position
 
         --// Top Bar \\-
         TopBar = New("Frame", {
@@ -14246,10 +14218,10 @@ function Library:CreateWindow(WindowInfo)
             end
             table.clear(ActiveToggleTweens)
 
-            if not SavedWindowPosition then
-                SavedWindowPosition = MainFrame.Position
+            if not Library.SavedWindowPosition then
+                Library.SavedWindowPosition = MainFrame.Position
             end
-            local TargetPos = SavedWindowPosition
+            local TargetPos = Library.SavedWindowPosition
 
             if Library.Toggled then
                 if not MainFrame.Visible then
@@ -14297,8 +14269,8 @@ function Library:CreateWindow(WindowInfo)
             end
         else
             MainFrame.Visible = Library.Toggled
-            if SavedWindowPosition then
-                MainFrame.Position = SavedWindowPosition
+            if Library.SavedWindowPosition then
+                MainFrame.Position = Library.SavedWindowPosition
             end
         end
 
@@ -15354,6 +15326,7 @@ function Library:Unload()
     Library.Overlay = nil
     Library.WindowContainer = nil
     Library.WindowTabsFrame = nil
+    Library.SavedWindowPosition = nil
     Library.KeybindFrame = nil
     Library.KeybindContainer = nil
 
