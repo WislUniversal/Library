@@ -406,7 +406,7 @@ local Templates = {
         ShowMobileButtons = true,
         ShowLockButton = false,
         MobileButtonsSide = "Left",
-        MobileButtonsOffset = UDim2.fromOffset(38, 16),
+        MobileButtonsOffset = UDim2.fromOffset(56, 28),
         ToggleIcon = "rbxassetid://81779667323093",
         ToggleIconSize = UDim2.fromOffset(50, 50),
         ToggleBackgroundColor = "BackgroundColor",
@@ -13987,7 +13987,7 @@ function Library:CreateWindow(WindowInfo)
             end, true, true)
         end
 
-        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(38, 16)
+        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(56, 28)
 
         if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
