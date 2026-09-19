@@ -2138,6 +2138,8 @@ local function GetSnapGuideOffset(Name: string, SnappedValue: number, ElemDimens
     return SnappedValue -- LeftEdge / TopEdge
 end
 
+local SavedWindowPosition: UDim2? = nil
+
 function Library:MakeDraggable(
     UI: GuiObject,
     DragFrame: GuiObject,
@@ -2215,6 +2217,7 @@ function Library:MakeDraggable(
 
         if IsMainWindow and FramePos then
             SavedWindowPosition = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
+            Library.SavedWindowPosition = SavedWindowPosition
         end
 
         if MoveConnection then
@@ -2238,6 +2241,7 @@ function Library:MakeDraggable(
                 UI.Position = UDim2.new(FramePos.X.Scale, TargetPos.X, FramePos.Y.Scale, TargetPos.Y)
                 if IsMainWindow then
                     SavedWindowPosition = UI.Position
+                    Library.SavedWindowPosition = UI.Position
                 end
             end
         end
@@ -2268,6 +2272,7 @@ function Library:MakeDraggable(
                     UI.Rotation = 0
                     if IsMainWindow then
                         SavedWindowPosition = UI.Position
+                        Library.SavedWindowPosition = UI.Position
                     end
                     if PhysicsConnection then
                         PhysicsConnection:Disconnect()
@@ -11044,7 +11049,6 @@ function Library:CreateWindow(WindowInfo)
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
     local WindowScale
-    local SavedWindowPosition = nil
     local ActiveToggleTweens = {}
     local ActiveCloseTweenId = 0
     local DividerLine
@@ -11150,6 +11154,7 @@ function Library:CreateWindow(WindowInfo)
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
         SavedWindowPosition = MainFrame.Position
+        Library.SavedWindowPosition = MainFrame.Position
 
         --// Top Bar \\-
         TopBar = New("Frame", {
@@ -14126,10 +14131,11 @@ function Library:CreateWindow(WindowInfo)
             end
             table.clear(ActiveToggleTweens)
 
-            local TargetPos = SavedWindowPosition
+            local TargetPos = SavedWindowPosition or Library.SavedWindowPosition
             if not TargetPos then
                 TargetPos = MainFrame.Position
                 SavedWindowPosition = TargetPos
+                Library.SavedWindowPosition = TargetPos
             end
 
             if Library.Toggled then
@@ -14184,8 +14190,9 @@ function Library:CreateWindow(WindowInfo)
             end
         else
             MainFrame.Visible = Library.Toggled
-            if SavedWindowPosition then
-                MainFrame.Position = SavedWindowPosition
+            local FinalPos = SavedWindowPosition or Library.SavedWindowPosition
+            if FinalPos then
+                MainFrame.Position = FinalPos
             end
         end
 
