@@ -11401,15 +11401,42 @@ function Library:CreateWindow(WindowInfo)
 
         --// Resize Button \\--
         if WindowInfo.Resizable then
+            local CornerOffset = math.max(2, math.floor(WindowInfo.CornerRadius * 0.35))
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 1),
+                AutoButtonColor = false,
+                BackgroundColor3 = "AccentColor",
                 BackgroundTransparency = 1,
-                Position = UDim2.new(1, -2, 1, -2),
-                Size = UDim2.fromOffset(18, 18),
+                Position = UDim2.new(1, -CornerOffset, 1, -CornerOffset),
+                Size = UDim2.fromOffset(20, 20),
                 Text = "",
-                ZIndex = 5,
+                ZIndex = 8,
                 Parent = MainFrame,
             })
+
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, 4),
+                    Parent = ResizeButton,
+                })
+            )
+
+            local WindowResizeIcon = New("ImageLabel", {
+                AnchorPoint = Vector2.new(1, 1),
+                BackgroundTransparency = 1,
+                ImageColor3 = function()
+                    return Library:GetDarkerColor(Library.Scheme.FontColor)
+                end,
+                ImageTransparency = 0.65,
+                Position = UDim2.new(1, -2, 1, -2),
+                Size = UDim2.fromOffset(12, 12),
+                ZIndex = 9,
+                Parent = ResizeButton,
+            })
+            if ResizeIcon then
+                Library:ApplyLucideIcon(WindowResizeIcon, ResizeIcon)
+            end
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
                 for _, Tab in Library.Tabs do
@@ -11417,19 +11444,54 @@ function Library:CreateWindow(WindowInfo)
                 end
             end)
 
-            local WindowResizeIcon = New("ImageLabel", {
-                ImageColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.FontColor, -40)
-                end,
-                ImageTransparency = 0.4,
-                Position = UDim2.fromOffset(2, 2),
-                Size = UDim2.new(1, -4, 1, -4),
-                ZIndex = 5,
-                Parent = ResizeButton,
-            })
-            if ResizeIcon then
-                Library:ApplyLucideIcon(WindowResizeIcon, ResizeIcon)
+            local IsHovered = false
+            local IsResizing = false
+
+            local function UpdateResizeVisual()
+                local TargetImageTransparency = (IsHovered or IsResizing) and 0 or 0.65
+                local TargetBackgroundTransparency = if IsResizing then 0.8 elseif IsHovered then 0.9 else 1
+                local TargetColor = (IsHovered or IsResizing) and Library.Scheme.AccentColor or Library:GetDarkerColor(Library.Scheme.FontColor)
+
+                TweenService:Create(WindowResizeIcon, Library.TweenInfo, {
+                    ImageTransparency = TargetImageTransparency,
+                    ImageColor3 = TargetColor,
+                }):Play()
+
+                TweenService:Create(ResizeButton, Library.TweenInfo, {
+                    BackgroundTransparency = TargetBackgroundTransparency,
+                }):Play()
             end
+
+            ResizeButton.MouseEnter:Connect(function()
+                IsHovered = true
+                UpdateResizeVisual()
+            end)
+
+            ResizeButton.MouseLeave:Connect(function()
+                IsHovered = false
+                if not IsResizing then
+                    UpdateResizeVisual()
+                end
+            end)
+
+            ResizeButton.InputBegan:Connect(function(Input: InputObject)
+                if IsClickInput(Input) then
+                    IsResizing = true
+                    UpdateResizeVisual()
+
+                    local EndConnection
+                    EndConnection = Input.Changed:Connect(function()
+                        if Input.UserInputState == Enum.UserInputState.End then
+                            if EndConnection then
+                                EndConnection:Disconnect()
+                                EndConnection = nil
+                            end
+                            IsResizing = false
+                            UpdateResizeVisual()
+                        end
+                    end)
+                end
+            end)
         end
 
         --// Profile \\--
@@ -11769,7 +11831,7 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.CornerRadius = Radius
 
         if ResizeButton then
-            ResizeButton.Position = UDim2.new(1, -math.max(2, math.floor(Radius / 4)), 1, -math.max(2, math.floor(Radius / 4)))
+            ResizeButton.Position = UDim2.new(1, -math.max(2, math.floor(Radius * 0.35)), 1, -math.max(2, math.floor(Radius * 0.35)))
         end
 
         for _, Menu in Library.ContextMenus do
