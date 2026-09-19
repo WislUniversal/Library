@@ -11085,6 +11085,36 @@ function Library:CreateWindow(WindowInfo)
     local CurrentTabLabel
     local CurrentTabDescription
     local ResizeButton
+    local ExecutorBadge
+    local ExecutorLabel
+
+    local function DetectExecutor(): string
+        local IdentifyFunc = identifyexecutor or (getgenv and getgenv().identifyexecutor)
+        if typeof(IdentifyFunc) == "function" then
+            local CallSuccess, ExecName, ExecVersion = pcall(IdentifyFunc)
+            if CallSuccess and typeof(ExecName) == "string" and ExecName ~= "" then
+                return if typeof(ExecVersion) == "string" and ExecVersion ~= ""
+                    then string.format("%s %s", ExecName, ExecVersion)
+                    else ExecName
+            end
+        end
+
+        local NameFunc = getexecutorname or (getgenv and getgenv().getexecutorname)
+        if typeof(NameFunc) == "function" then
+            local CallSuccess, ExecName, ExecVersion = pcall(NameFunc)
+            if CallSuccess and typeof(ExecName) == "string" and ExecName ~= "" then
+                return if typeof(ExecVersion) == "string" and ExecVersion ~= ""
+                    then string.format("%s %s", ExecName, ExecVersion)
+                    else ExecName
+            end
+        end
+
+        if RunService:IsStudio() then
+            return "Roblox Studio"
+        end
+
+        return "Unknown"
+    end
     local Tabs
     local TabsCorner
     local Container
@@ -11290,7 +11320,7 @@ function Library:CreateWindow(WindowInfo)
 
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
-            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
             VerticalAlignment = Enum.VerticalAlignment.Center,
             Padding = UDim.new(0, 8),
             Parent = RightWrapper,
@@ -11300,6 +11330,7 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
             Visible = false,
             BackgroundTransparency = 1,
+            LayoutOrder = 1,
             Parent = RightWrapper,
         })
 
@@ -11351,6 +11382,7 @@ function Library:CreateWindow(WindowInfo)
             Size = WindowInfo.SearchbarSize,
             TextScaled = true,
             Visible = not (WindowInfo.DisableSearch or false),
+            LayoutOrder = 2,
             Parent = RightWrapper,
         })
         New("UIFlexItem", {
@@ -11401,6 +11433,70 @@ function Library:CreateWindow(WindowInfo)
             })
             Library:ApplyLucideIcon(SearchIconImage, SearchIcon)
         end
+
+        local DetectedExecutor = DetectExecutor()
+        ExecutorBadge = New("Frame", {
+            Active = false,
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 2)
+            end,
+            BorderSizePixel = 0,
+            LayoutOrder = 3,
+            Size = UDim2.new(0, 0, 1, 0),
+            Parent = RightWrapper,
+        })
+        New("UIFlexItem", {
+            FlexMode = Enum.UIFlexMode.None,
+            Parent = ExecutorBadge,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, 8),
+            Parent = ExecutorBadge,
+        })
+        New("UIStroke", {
+            Color = "OutlineColor",
+            Thickness = 1,
+            Parent = ExecutorBadge,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 4),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 4),
+            Parent = ExecutorBadge,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            Parent = ExecutorBadge,
+        })
+
+        local ExecIconData = Library:GetIcon("cpu") or Library:GetIcon("terminal") or Library:GetIcon("code")
+        if ExecIconData then
+            local ExecIconImage = New("ImageLabel", {
+                BackgroundTransparency = 1,
+                ImageColor3 = "AccentColor",
+                Size = UDim2.fromOffset(16, 16),
+                Parent = ExecutorBadge,
+            })
+            Library:ApplyLucideIcon(ExecIconImage, ExecIconData)
+        end
+
+        ExecutorLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            FontFace = "Font",
+            Size = UDim2.fromScale(0, 1),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Text = DetectedExecutor,
+            TextColor3 = "FontColor",
+            TextSize = 13,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = ExecutorBadge,
+        })
 
         if MoveIcon then
             local MoveIconImage = New("ImageLabel", {
@@ -11523,6 +11619,7 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             BorderSizePixel = 0,
+            ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
             Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -49),
@@ -11536,10 +11633,10 @@ function Library:CreateWindow(WindowInfo)
             Parent = Container,
         })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 8),
             PaddingLeft = UDim.new(0, 6),
             PaddingRight = UDim.new(0, 6),
-            PaddingTop = UDim.new(0, 0),
+            PaddingTop = UDim.new(0, 2),
             Parent = Container,
         })
 
@@ -11549,6 +11646,9 @@ function Library:CreateWindow(WindowInfo)
     --// Window Table \\--
     local Window = {
         AllowModifiers = Library.AllowModifiers,
+        ExecutorBadge = ExecutorBadge,
+        ExecutorLabel = ExecutorLabel,
+        GetExecutorName = DetectExecutor,
     }
 
     local function SetUICorner(UICorner, Corner, HalfValue)
@@ -11558,6 +11658,20 @@ function Library:CreateWindow(WindowInfo)
         end
 
         UICorner[Corner] = HalfValue
+    end
+
+    function Window:SetExecutorName(CustomName: string)
+        assert(typeof(CustomName) == "string", "Expected string for executor name got: " .. typeof(CustomName))
+        if ExecutorLabel then
+            ExecutorLabel.Text = CustomName
+        end
+    end
+
+    function Window:SetExecutorVisible(State: boolean)
+        assert(typeof(State) == "boolean", "Expected boolean for executor visibility got: " .. typeof(State))
+        if ExecutorBadge then
+            ExecutorBadge.Visible = State
+        end
     end
 
     function Window:ChangeTitle(title)
@@ -12026,8 +12140,9 @@ function Library:CreateWindow(WindowInfo)
             --// Tab Container \\--
             TabContainer = New("Frame", {
                 BackgroundTransparency = 1,
+                ClipsDescendants = true,
                 Position = UDim2.fromScale(0, 0),
-                Size = UDim2.fromScale(1, 1),
+                Size = UDim2.new(1, -12, 1, -10),
                 Visible = false,
                 Parent = Container,
             })
@@ -12046,7 +12161,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabLeft,
             })
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 2),
+                PaddingBottom = UDim.new(0, 4),
                 PaddingLeft = UDim.new(0, 2),
                 PaddingRight = UDim.new(0, 2),
                 PaddingTop = UDim.new(0, 2),
@@ -12081,7 +12196,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabRight,
             })
             New("UIPadding", {
-                PaddingBottom = UDim.new(0, 2),
+                PaddingBottom = UDim.new(0, 4),
                 PaddingLeft = UDim.new(0, 2),
                 PaddingRight = UDim.new(0, 2),
                 PaddingTop = UDim.new(0, 2),
@@ -13488,8 +13603,9 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 CanvasSize = UDim2.fromScale(0, 0),
                 ScrollBarThickness = 0,
+                ClipsDescendants = true,
                 Position = UDim2.fromScale(0, 0),
-                Size = UDim2.fromScale(1, 1),
+                Size = UDim2.new(1, -12, 1, -10),
                 Visible = false,
                 Parent = Container,
             })
