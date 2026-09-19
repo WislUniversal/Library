@@ -11543,6 +11543,7 @@ function Library:CreateWindow(WindowInfo)
                 TextSize = 14,
                 TextTruncate = Enum.TextTruncate.AtEnd,
                 TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 2,
                 Parent = ProfileTextHolder,
             })
 
@@ -11557,8 +11558,99 @@ function Library:CreateWindow(WindowInfo)
                 TextSize = 12,
                 TextTruncate = Enum.TextTruncate.AtEnd,
                 TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 2,
                 Parent = ProfileTextHolder,
             })
+
+            local DisplayPill = New("Frame", {
+                Active = false,
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 5)
+                end,
+                BackgroundTransparency = 0.45,
+                Position = UDim2.fromOffset(-3, -1),
+                Size = UDim2.new(0.8, 6, 1, 2),
+                Visible = false,
+                ZIndex = 1,
+                Parent = ProfileDisplayName,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, 4),
+                Parent = DisplayPill,
+            })
+
+            local UsernamePill = New("Frame", {
+                Active = false,
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, 5)
+                end,
+                BackgroundTransparency = 0.45,
+                Position = UDim2.fromOffset(-3, -1),
+                Size = UDim2.new(0.7, 6, 1, 2),
+                Visible = false,
+                ZIndex = 1,
+                Parent = ProfileUsername,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, 4),
+                Parent = UsernamePill,
+            })
+
+            local BlurOffsets = {
+                Vector2.new(-1.5, 0),
+                Vector2.new(1.5, 0),
+                Vector2.new(0, -1.5),
+                Vector2.new(0, 1.5),
+                Vector2.new(-1, -1),
+                Vector2.new(1, 1),
+                Vector2.new(-1, 1),
+                Vector2.new(1, -1),
+            }
+
+            local DisplayBlurLabels = {}
+            local UsernameBlurLabels = {}
+
+            for _, Offset in BlurOffsets do
+                local DisplayBlur = New("TextLabel", {
+                    Active = false,
+                    Selectable = false,
+                    BackgroundTransparency = 1,
+                    FontFace = "Font",
+                    Position = UDim2.fromOffset(Offset.X, Offset.Y),
+                    Size = UDim2.fromScale(1, 1),
+                    Text = "",
+                    TextColor3 = "FontColor",
+                    TextSize = 14,
+                    TextTransparency = 0.6,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Visible = false,
+                    ZIndex = 1,
+                    Parent = ProfileDisplayName,
+                })
+                table.insert(DisplayBlurLabels, DisplayBlur)
+
+                local UsernameBlur = New("TextLabel", {
+                    Active = false,
+                    Selectable = false,
+                    BackgroundTransparency = 1,
+                    FontFace = "Font",
+                    Position = UDim2.fromOffset(Offset.X, Offset.Y),
+                    Size = UDim2.fromScale(1, 1),
+                    Text = "",
+                    TextColor3 = function()
+                        return Library:GetDarkerColor(Library.Scheme.FontColor)
+                    end,
+                    TextSize = 12,
+                    TextTransparency = 0.6,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Visible = false,
+                    ZIndex = 1,
+                    Parent = ProfileUsername,
+                })
+                table.insert(UsernameBlurLabels, UsernameBlur)
+            end
 
             UpdateProfileDisplay = function()
                 if not ProfileDisplayName or not ProfileUsername then
@@ -11567,17 +11659,51 @@ function Library:CreateWindow(WindowInfo)
 
                 local ShouldCensor = IsProfileCensored and not IsProfileHovered
                 if ShouldCensor then
-                    local DisplayMaskCount = math.clamp(utf8.len(RealDisplayName) or #RealDisplayName, 5, 12)
-                    ProfileDisplayName.Text = string.rep("•", DisplayMaskCount)
+                    local DisplayMaskCount = math.clamp(utf8.len(RealDisplayName) or #RealDisplayName, 6, 12)
+                    local DisplayMasked = string.rep("*", DisplayMaskCount)
 
                     local UsernameClean = RealUsername:gsub("^@", "")
-                    local UsernameMaskCount = math.clamp(utf8.len(UsernameClean) or #UsernameClean, 5, 12)
-                    ProfileUsername.Text = "@" .. string.rep("•", UsernameMaskCount)
+                    local UsernameMaskCount = math.clamp(utf8.len(UsernameClean) or #UsernameClean, 6, 12)
+                    local UsernameMasked = "@" .. string.rep("*", UsernameMaskCount)
+
+                    ProfileDisplayName.Text = DisplayMasked
+                    ProfileDisplayName.TextTransparency = 0.35
+
+                    ProfileUsername.Text = UsernameMasked
+                    ProfileUsername.TextTransparency = 0.35
+
+                    DisplayPill.Size = UDim2.new(0, math.clamp(DisplayMaskCount * 9 + 8, 50, 120), 1, 2)
+                    DisplayPill.Visible = true
+
+                    UsernamePill.Size = UDim2.new(0, math.clamp(UsernameMaskCount * 8 + 14, 50, 120), 1, 2)
+                    UsernamePill.Visible = true
+
+                    for _, BlurLabel in DisplayBlurLabels do
+                        BlurLabel.Text = DisplayMasked
+                        BlurLabel.Visible = true
+                    end
+                    for _, BlurLabel in UsernameBlurLabels do
+                        BlurLabel.Text = UsernameMasked
+                        BlurLabel.Visible = true
+                    end
                     return
                 end
 
                 ProfileDisplayName.Text = RealDisplayName
+                ProfileDisplayName.TextTransparency = 0
+
                 ProfileUsername.Text = RealUsername
+                ProfileUsername.TextTransparency = 0
+
+                DisplayPill.Visible = false
+                UsernamePill.Visible = false
+
+                for _, BlurLabel in DisplayBlurLabels do
+                    BlurLabel.Visible = false
+                end
+                for _, BlurLabel in UsernameBlurLabels do
+                    BlurLabel.Visible = false
+                end
             end
 
             UpdateProfileDisplay()
