@@ -275,17 +275,17 @@ local Library = {
     --// Scheme \\--
     IsLightTheme = false,
     Scheme = {
-        BackgroundColor = Color3.fromRGB(20, 20, 30),
-        MainColor = Color3.fromRGB(30, 30, 44),
-        AccentColor = Color3.fromRGB(130, 95, 255),
-        OutlineColor = Color3.fromRGB(52, 52, 74),
-        FontColor = Color3.new(1, 1, 1),
+        BackgroundColor = Color3.fromHex("1f1433"),
+        MainColor = Color3.fromHex("321e56"),
+        AccentColor = Color3.fromHex("a359ff"),
+        OutlineColor = Color3.fromHex("764ba8"),
+        FontColor = Color3.fromHex("f5f0ff"),
         Font = Font.fromEnum(Enum.Font.FredokaOne),
 
-        RedColor = Color3.fromRGB(255, 75, 75),
-        DestructiveColor = Color3.fromRGB(235, 55, 55),
-        DarkColor = Color3.new(0, 0, 0),
-        WhiteColor = Color3.new(1, 1, 1),
+        RedColor = Color3.fromRGB(255, 70, 95),
+        DestructiveColor = Color3.fromRGB(240, 50, 80),
+        DarkColor = Color3.fromHex("0e0719"),
+        WhiteColor = Color3.fromHex("ffffff"),
 
         BackgroundImage = ""
     },
@@ -376,7 +376,7 @@ local Templates = {
         Footer = "No Footer",
 
         Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.fromOffset(720, 600),
+        Size = UDim2.fromOffset(880, 690),
         IconSize = UDim2.fromOffset(30, 30),
 
         AutoShow = true,
