@@ -2152,6 +2152,18 @@ function Library:MakeDraggable(
     local Changed
     local InputBegan
     local InputChanged
+    local PhysicsConnection: RBXScriptConnection? = nil
+
+    local OrigAnchor = UI.AnchorPoint
+    local GrabRatioX = 0.5
+    local GrabRatioY = 0
+    local StartPivotOffset = Vector2.new(0, 0)
+    local CurrentPivot = Vector2.new(0, 0)
+    local TargetPivot = Vector2.new(0, 0)
+    local PrevTargetX = 0
+    local VelocityX = 0
+    local CurrentTilt = 0
+    local TargetTilt = 0
 
     local SnapGuideX, SnapGuideY
 
@@ -2194,6 +2206,90 @@ function Library:MakeDraggable(
         end
     end
 
+    local function StopPhysics(ImmediateReset: boolean?)
+        if ImmediateReset then
+            if PhysicsConnection then
+                PhysicsConnection:Disconnect()
+                PhysicsConnection = nil
+            end
+            UI.Rotation = 0
+            UI.AnchorPoint = OrigAnchor
+            if FramePos and TargetPivot then
+                local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+                local BaseScaleX = FramePos.X.Scale
+                local BaseScaleY = FramePos.Y.Scale
+                local FinalTopLeftX = TargetPivot.X - StartPivotOffset.X
+                local FinalTopLeftY = TargetPivot.Y - StartPivotOffset.Y
+                local OffsetX = FinalTopLeftX - BaseScaleX * ViewportSize.X
+                local OffsetY = FinalTopLeftY - BaseScaleY * ViewportSize.Y
+                UI.Position = UDim2.new(BaseScaleX, OffsetX, BaseScaleY, OffsetY)
+                if IsMainWindow then
+                    SavedWindowPosition = UI.Position
+                end
+            end
+        end
+    end
+
+    local function StartPhysicsLoop()
+        if PhysicsConnection then
+            return
+        end
+
+        PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
+            local dtClamped = math.clamp(dt, 0.001, 0.05)
+            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+
+            local FollowRate = Dragging and 26 or 22
+            local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
+            CurrentPivot = CurrentPivot:Lerp(TargetPivot, FollowAlpha)
+
+            local InstantVelX = (TargetPivot.X - PrevTargetX) / dtClamped
+            PrevTargetX = TargetPivot.X
+            VelocityX = VelocityX + (InstantVelX - VelocityX) * math.clamp(14 * dtClamped, 0, 1)
+
+            if Dragging then
+                local MaxTilt = 3.6
+                TargetTilt = math.clamp(VelocityX * 0.0026, -MaxTilt, MaxTilt)
+            else
+                TargetTilt = 0
+            end
+
+            local TiltRate = Dragging and 18 or 24
+            CurrentTilt = CurrentTilt + (TargetTilt - CurrentTilt) * math.clamp(TiltRate * dtClamped, 0, 1)
+
+            local BaseScaleX = FramePos and FramePos.X.Scale or 0
+            local BaseScaleY = FramePos and FramePos.Y.Scale or 0
+            local PivotOffsetX = CurrentPivot.X - BaseScaleX * ViewportSize.X
+            local PivotOffsetY = CurrentPivot.Y - BaseScaleY * ViewportSize.Y
+
+            UI.Position = UDim2.new(BaseScaleX, PivotOffsetX, BaseScaleY, PivotOffsetY)
+            UI.Rotation = CurrentTilt
+
+            if not Dragging then
+                local Dist = (CurrentPivot - TargetPivot).Magnitude
+                if Dist < 0.4 and math.abs(CurrentTilt) < 0.04 then
+                    UI.Rotation = 0
+                    UI.AnchorPoint = OrigAnchor
+
+                    local FinalTopLeftX = TargetPivot.X - StartPivotOffset.X
+                    local FinalTopLeftY = TargetPivot.Y - StartPivotOffset.Y
+                    local OffsetX = FinalTopLeftX - BaseScaleX * ViewportSize.X
+                    local OffsetY = FinalTopLeftY - BaseScaleY * ViewportSize.Y
+                    UI.Position = UDim2.new(BaseScaleX, OffsetX, BaseScaleY, OffsetY)
+
+                    if IsMainWindow then
+                        SavedWindowPosition = UI.Position
+                    end
+
+                    if PhysicsConnection then
+                        PhysicsConnection:Disconnect()
+                        PhysicsConnection = nil
+                    end
+                end
+            end
+        end)
+    end
+
     InputBegan = DragFrame.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) or IsMainWindow and Library.CantDragForced then
             return
@@ -2201,7 +2297,32 @@ function Library:MakeDraggable(
 
         StartPos = Input.Position
         FramePos = UI.Position
+        OrigAnchor = UI.AnchorPoint
+
+        local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+        local ElemSize = UI.AbsoluteSize
+        local StartAbsPos = UI.AbsolutePosition
+
+        GrabRatioX = math.clamp((Input.Position.X - StartAbsPos.X) / math.max(ElemSize.X, 1), 0.05, 0.95)
+        GrabRatioY = 0
+        StartPivotOffset = Vector2.new(ElemSize.X * GrabRatioX, ElemSize.Y * GrabRatioY)
+
+        CurrentPivot = Vector2.new(StartAbsPos.X + StartPivotOffset.X, StartAbsPos.Y + StartPivotOffset.Y)
+        TargetPivot = CurrentPivot
+        PrevTargetX = TargetPivot.X
+        VelocityX = 0
+        CurrentTilt = UI.Rotation or 0
+        TargetTilt = 0
+
+        UI.AnchorPoint = Vector2.new(GrabRatioX, GrabRatioY)
+        local BaseScaleX = FramePos.X.Scale
+        local BaseScaleY = FramePos.Y.Scale
+        local PivotOffsetX = CurrentPivot.X - BaseScaleX * ViewportSize.X
+        local PivotOffsetY = CurrentPivot.Y - BaseScaleY * ViewportSize.Y
+        UI.Position = UDim2.new(BaseScaleX, PivotOffsetX, BaseScaleY, PivotOffsetY)
+
         Dragging = true
+        StartPhysicsLoop()
 
         Changed = Input.Changed:Connect(function()
             if Input.UserInputState ~= Enum.UserInputState.End then
@@ -2226,6 +2347,7 @@ function Library:MakeDraggable(
         then
             Dragging = false
             HideSnapGuides()
+            StopPhysics(true)
 
             if Changed and Changed.Connected then
                 Changed:Disconnect()
@@ -2235,29 +2357,29 @@ function Library:MakeDraggable(
             return
         end
 
-        if Dragging and IsHoverInput(Input) then
+        if Dragging and IsHoverInput(Input) and StartPos and FramePos then
             local Delta = Input.Position - StartPos
             local NewX = FramePos.X.Offset + Delta.X
             local NewY = FramePos.Y.Offset + Delta.Y
 
+            local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local AbsX = FramePos.X.Scale * ViewportSize.X + NewX
+            local AbsY = FramePos.Y.Scale * ViewportSize.Y + NewY
+            local ElemSize = UI.AbsoluteSize
+
             if SnapConfig and SnapConfig.Enabled then
-                local ViewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
                 local Distance = SnapConfig.Distance or 28
                 local Margin = SnapConfig.Margin or 8
 
-                local AbsX = FramePos.X.Scale * ViewportSize.X + NewX
-                local AbsY = FramePos.Y.Scale * ViewportSize.Y + NewY
-
-                local ElemSize = UI.AbsoluteSize
                 local TargetsX, TargetsY = GetSnapEdges(ElemSize, ViewportSize, Margin, SnapConfig.AvoidCoreGui ~= false)
                 local SnappedX, SnappedXName = GetClosestSnapTarget(AbsX, TargetsX, Distance)
                 local SnappedY, SnappedYName = GetClosestSnapTarget(AbsY, TargetsY, Distance)
 
                 if SnappedX then
-                    NewX = SnappedX - FramePos.X.Scale * ViewportSize.X
+                    AbsX = SnappedX
                 end
                 if SnappedY then
-                    NewY = SnappedY - FramePos.Y.Scale * ViewportSize.Y
+                    AbsY = SnappedY
                 end
 
                 local GuideX, GuideY = GetSnapGuides()
@@ -2272,7 +2394,7 @@ function Library:MakeDraggable(
                 end
             end
 
-            UI.Position = UDim2.new(FramePos.X.Scale, NewX, FramePos.Y.Scale, NewY)
+            TargetPivot = Vector2.new(AbsX + StartPivotOffset.X, AbsY + StartPivotOffset.Y)
         end
     end)
 
@@ -2280,6 +2402,11 @@ function Library:MakeDraggable(
     Library:GiveSignal(InputBegan)
 
     UI.Destroying:Once(function()
+        if PhysicsConnection and PhysicsConnection.Connected then
+            PhysicsConnection:Disconnect()
+            PhysicsConnection = nil
+        end
+
         if InputChanged and InputChanged.Connected then
             InputChanged:Disconnect()
         end
@@ -3208,7 +3335,8 @@ function Library:AddDraggableButton(...)
             })
         )
     end
-    Library:AddOutline(Button)
+    local BaseSize = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(50, 50)
+    local OutlineStroke, ShadowStroke = Library:AddOutline(Button)
 
     local IconLabel
     if Icon then
@@ -3228,71 +3356,199 @@ function Library:AddDraggableButton(...)
         DraggableButton.IconLabel = IconLabel
     end
 
-    if ExcludeDragging then
-        local LastClickTime = 0
-        table.insert(
-            DraggableButton.Connections,
-            Button.InputBegan:Connect(function(Input: InputObject)
-                if Input.UserInputType == Enum.UserInputType.Touch or Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local Now = tick()
-                    if Now - LastClickTime < 0.03 then
-                        return
+    local ActiveInput: InputObject? = nil
+    local TouchStartPos: Vector2? = nil
+    local DragOffset: Vector2? = nil
+    local IsDragging = false
+    local HoldThread: thread? = nil
+    local LastClickTime = 0
+    local PhysicsConnection: RBXScriptConnection? = nil
+
+    local CurrentButtonPos = Vector2.new(0, 0)
+    local TargetButtonPos = Vector2.new(0, 0)
+    local PrevTargetBtnX = 0
+    local BtnVelocityX = 0
+    local CurrentBtnTilt = 0
+    local TargetBtnTilt = 0
+
+    local function ResetDragVisual()
+        if OutlineStroke then
+            TweenService:Create(OutlineStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Color = Library.Scheme.OutlineColor
+            }):Play()
+        end
+        TweenService:Create(Button, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = BaseSize
+        }):Play()
+    end
+
+    local function CancelHold()
+        if HoldThread then
+            task.cancel(HoldThread)
+            HoldThread = nil
+        end
+    end
+
+    local function StartButtonPhysics()
+        if PhysicsConnection then
+            return
+        end
+
+        PhysicsConnection = RunService.RenderStepped:Connect(function(dt)
+            local dtClamped = math.clamp(dt, 0.001, 0.05)
+
+            local FollowRate = IsDragging and 28 or 22
+            local FollowAlpha = 1 - math.exp(-FollowRate * dtClamped)
+            CurrentButtonPos = CurrentButtonPos:Lerp(TargetButtonPos, FollowAlpha)
+
+            local InstantVelX = (TargetButtonPos.X - PrevTargetBtnX) / dtClamped
+            PrevTargetBtnX = TargetButtonPos.X
+            BtnVelocityX = BtnVelocityX + (InstantVelX - BtnVelocityX) * math.clamp(16 * dtClamped, 0, 1)
+
+            if IsDragging then
+                local MaxTilt = 9.0
+                TargetBtnTilt = math.clamp(BtnVelocityX * 0.0075, -MaxTilt, MaxTilt)
+            else
+                TargetBtnTilt = 0
+            end
+
+            local TiltRate = IsDragging and 20 or 24
+            CurrentBtnTilt = CurrentBtnTilt + (TargetBtnTilt - CurrentBtnTilt) * math.clamp(TiltRate * dtClamped, 0, 1)
+
+            Button.Position = UDim2.fromOffset(CurrentButtonPos.X, CurrentButtonPos.Y)
+            Button.Rotation = CurrentBtnTilt
+
+            if not IsDragging then
+                local Dist = (CurrentButtonPos - TargetButtonPos).Magnitude
+                if Dist < 0.4 and math.abs(CurrentBtnTilt) < 0.05 then
+                    Button.Rotation = 0
+                    local HalfW = Button.AbsoluteSize.X * 0.5
+                    local HalfH = Button.AbsoluteSize.Y * 0.5
+                    Button.AnchorPoint = Vector2.new(0, 0)
+                    Button.Position = UDim2.fromOffset(CurrentButtonPos.X - HalfW, CurrentButtonPos.Y - HalfH)
+
+                    if PhysicsConnection then
+                        PhysicsConnection:Disconnect()
+                        PhysicsConnection = nil
                     end
+                end
+            end
+        end)
+    end
+
+    table.insert(
+        DraggableButton.Connections,
+        Button.InputBegan:Connect(function(Input: InputObject)
+            if Input.UserInputType ~= Enum.UserInputType.Touch and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+                return
+            end
+            if ActiveInput then
+                return
+            end
+
+            ActiveInput = Input
+            TouchStartPos = Vector2.new(Input.Position.X, Input.Position.Y)
+            IsDragging = false
+            CancelHold()
+
+            if not ExcludeDragging and not Library.CantDragForced then
+                HoldThread = task.delay(0.35, function()
+                    if ActiveInput == Input and not IsDragging then
+                        local HalfW = Button.AbsoluteSize.X * 0.5
+                        local HalfH = Button.AbsoluteSize.Y * 0.5
+                        local Center = Button.AbsolutePosition + Vector2.new(HalfW, HalfH)
+                        DragOffset = Vector2.new(Input.Position.X - Center.X, Input.Position.Y - Center.Y)
+
+                        Button.AnchorPoint = Vector2.new(0.5, 0.5)
+                        CurrentButtonPos = Center
+                        TargetButtonPos = Center
+                        PrevTargetBtnX = Center.X
+                        BtnVelocityX = 0
+                        CurrentBtnTilt = Button.Rotation or 0
+                        TargetBtnTilt = 0
+                        Button.Position = UDim2.fromOffset(Center.X, Center.Y)
+                        IsDragging = true
+
+                        if OutlineStroke then
+                            TweenService:Create(OutlineStroke, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                                Color = Library.Scheme.AccentColor
+                            }):Play()
+                        end
+                        TweenService:Create(Button, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                            Size = UDim2.new(BaseSize.X.Scale, BaseSize.X.Offset + 6, BaseSize.Y.Scale, BaseSize.Y.Offset + 6)
+                        }):Play()
+
+                        StartButtonPhysics()
+                    end
+                end)
+            end
+        end)
+    )
+
+    table.insert(
+        DraggableButton.Connections,
+        UserInputService.InputChanged:Connect(function(Input: InputObject)
+            if Input ~= ActiveInput then
+                return
+            end
+
+            if IsDragging then
+                local InputPos = Vector2.new(Input.Position.X, Input.Position.Y)
+                local RawCenterX = InputPos.X - (DragOffset and DragOffset.X or 0)
+                local RawCenterY = InputPos.Y - (DragOffset and DragOffset.Y or 0)
+
+                local Camera = workspace.CurrentCamera
+                local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
+                local HalfW = Button.AbsoluteSize.X * 0.5
+                local HalfH = Button.AbsoluteSize.Y * 0.5
+
+                TargetButtonPos = Vector2.new(
+                    math.clamp(RawCenterX, HalfW, Viewport.X - HalfW),
+                    math.clamp(RawCenterY, HalfH, Viewport.Y - HalfH)
+                )
+            elseif TouchStartPos then
+                local Dist = (Vector2.new(Input.Position.X, Input.Position.Y) - TouchStartPos).Magnitude
+                if Dist > 14 then
+                    CancelHold()
+                end
+            end
+        end)
+    )
+
+    local function HandleInputEnded(Input: InputObject)
+        if Input ~= ActiveInput then
+            return
+        end
+
+        CancelHold()
+
+        if IsDragging then
+            IsDragging = false
+            ResetDragVisual()
+        else
+            local Dist = TouchStartPos and (Vector2.new(Input.Position.X, Input.Position.Y) - TouchStartPos).Magnitude or 0
+            if Dist <= 14 then
+                local Now = tick()
+                if Now - LastClickTime >= 0.03 then
                     LastClickTime = Now
                     Library:SafeCallback(Func, DraggableButton)
                 end
-            end)
-        )
-    else
-        local DragMoved = false
-        local DragStartPos = nil
-        local LastClickTime = 0
-
-        table.insert(
-            DraggableButton.Connections,
-            Button.InputBegan:Connect(function(Input: InputObject)
-                if not IsClickInput(Input) then
-                    return
-                end
-                DragStartPos = Input.Position
-                DragMoved = false
-            end)
-        )
-
-        table.insert(
-            DraggableButton.Connections,
-            UserInputService.InputChanged:Connect(function(Input: InputObject)
-                if DragStartPos and IsHoverInput(Input) then
-                    if (Input.Position - DragStartPos).Magnitude > 16 then
-                        DragMoved = true
-                    end
-                end
-            end)
-        )
-
-        table.insert(
-            DraggableButton.Connections,
-            Button.InputEnded:Connect(function(Input: InputObject)
-                if DragStartPos and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
-                    if (Input.Position - DragStartPos).Magnitude <= 16 and not DragMoved then
-                        local Now = tick()
-                        if Now - LastClickTime >= 0.05 then
-                            LastClickTime = Now
-                            Library:SafeCallback(Func, DraggableButton)
-                        end
-                    end
-                    DragStartPos = nil
-                    DragMoved = false
-                end
-            end)
-        )
-
-        Library:MakeDraggable(Button, Button, true)
-        if not table.find(Library.DraggableElements, Button) then
-            table.insert(Library.DraggableElements, Button)
+            end
         end
-        PositionDraggable(Button, Button.Position)
+
+        ActiveInput = nil
+        TouchStartPos = nil
+        DragOffset = nil
     end
+
+    table.insert(
+        DraggableButton.Connections,
+        UserInputService.InputEnded:Connect(HandleInputEnded)
+    )
+    table.insert(
+        DraggableButton.Connections,
+        Button.InputEnded:Connect(HandleInputEnded)
+    )
 
     function DraggableButton:SetText(NewText: string)
         if not NewText then
@@ -3320,6 +3576,11 @@ function Library:AddDraggableButton(...)
 
     function DraggableButton:Destroy()
         DraggableButton.Destroyed = true
+
+        if PhysicsConnection and PhysicsConnection.Connected then
+            PhysicsConnection:Disconnect()
+            PhysicsConnection = nil
+        end
 
         if DraggableButton.Connections then
             for _, connection in DraggableButton.Connections do
@@ -10155,7 +10416,23 @@ do
         }
 
         function DepGroupbox:Resize()
-            DepGroupboxContainer.Size = UDim2.new(1, 0, 0, (DepGroupboxList.AbsoluteContentSize.Y / Library.DPIScale) + 18)
+            local ContentMeasured = DepGroupboxList.AbsoluteContentSize.Y / Library.DPIScale
+            if ContentMeasured <= 0 then
+                local EstimatedContent = 0
+                local VisibleCount = 0
+                for _, Child in DepGroupboxContainer:GetChildren() do
+                    if Child:IsA("GuiObject") and Child.Visible ~= false then
+                        EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
+                        VisibleCount = VisibleCount + 1
+                    end
+                end
+                if VisibleCount > 0 then
+                    EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
+                end
+                ContentMeasured = math.max(ContentMeasured, EstimatedContent)
+            end
+
+            DepGroupboxContainer.Size = UDim2.new(1, 0, 0, ContentMeasured + 18)
         end
 
         function DepGroupbox:Update(CancelSearch)
@@ -10211,6 +10488,13 @@ do
         end
 
         setmetatable(DepGroupbox, BaseGroupbox)
+
+        table.insert(
+            DepGroupbox.Connections,
+            DepGroupboxList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                DepGroupbox:Resize()
+            end)
+        )
 
         table.insert(Tab.DependencyGroupboxes, DepGroupbox)
         table.insert(Library.DependencyBoxes, DepGroupbox :: any)
@@ -12166,7 +12450,23 @@ function Library:CreateWindow(WindowInfo)
                         return
                     end
 
-                    local ContentSize = (List.AbsoluteContentSize.Y / Library.DPIScale) + 14
+                    local ContentMeasured = List.AbsoluteContentSize.Y / Library.DPIScale
+                    if ContentMeasured <= 0 then
+                        local EstimatedContent = 0
+                        local VisibleCount = 0
+                        for _, Child in Container:GetChildren() do
+                            if Child:IsA("GuiObject") and Child.Visible ~= false then
+                                EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
+                                VisibleCount = VisibleCount + 1
+                            end
+                        end
+                        if VisibleCount > 0 then
+                            EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
+                        end
+                        ContentMeasured = math.max(ContentMeasured, EstimatedContent)
+                    end
+
+                    local ContentSize = ContentMeasured + 14
                     if Tabbox.PoppedOut then
                         ContentSize = math.min(ContentSize, GetPopOutBodyMaxHeight(Tabbox, 35))
                     end
@@ -12222,6 +12522,13 @@ function Library:CreateWindow(WindowInfo)
                 Button.MouseButton1Click:Connect(Tab.Show)
 
                 setmetatable(Tab, BaseGroupbox)
+
+                table.insert(
+                    Tab.Connections,
+                    List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                        Tab:Resize()
+                    end)
+                )
 
                 Tabbox.Tabs[TabStoringIndex] = Tab
                 Tabbox:UpdateCorners()
@@ -12499,10 +12806,33 @@ function Library:CreateWindow(WindowInfo)
                     ResizeTween = nil
                 end
 
-                local TopSize = (GroupboxTop.AbsoluteSize.Y / Library.DPIScale)
-                local ContainerSize = (GroupboxList.AbsoluteContentSize.Y / Library.DPIScale) + 14
+                local TopMeasured = GroupboxTop.AbsoluteSize.Y / Library.DPIScale
+                local TopMin = (Info.Description and #Info.Description > 0) and 48 or 34
+                local TopSize = math.max(TopMeasured, TopMin)
+
+                local ContentMeasured = GroupboxList.AbsoluteContentSize.Y / Library.DPIScale
+                if ContentMeasured <= 0 then
+                    local EstimatedContent = 0
+                    local VisibleCount = 0
+                    for _, Child in GroupboxContainer:GetChildren() do
+                        if Child:IsA("GuiObject") and Child.Visible ~= false then
+                            EstimatedContent = EstimatedContent + (Child.Size.Y.Offset / Library.DPIScale)
+                            VisibleCount = VisibleCount + 1
+                        end
+                    end
+                    if VisibleCount > 0 then
+                        EstimatedContent = EstimatedContent + (math.max(0, VisibleCount - 1) * 8)
+                    end
+                    ContentMeasured = math.max(ContentMeasured, EstimatedContent)
+                end
+
+                local ContainerSize = ContentMeasured + 14
                 if Groupbox.PoppedOut then
                     ContainerSize = math.min(ContainerSize, GetPopOutBodyMaxHeight(Groupbox, TopSize + 1))
+                    GroupboxContainer.ScrollingEnabled = true
+                else
+                    GroupboxContainer.ScrollingEnabled = false
+                    GroupboxContainer.CanvasPosition = Vector2.new(0, 0)
                 end
 
                 local TargetSize = UDim2.new(1, 0, 0, if Groupbox.Collapsed then TopSize else (TopSize + 1 + ContainerSize))
@@ -12675,6 +13005,20 @@ function Library:CreateWindow(WindowInfo)
             Groupbox.AddTabbox = AddTabbox
             setmetatable(Groupbox, BaseGroupbox)
 
+            table.insert(
+                Groupbox.Connections,
+                GroupboxList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    Groupbox:Resize()
+                end)
+            )
+
+            table.insert(
+                Groupbox.Connections,
+                GroupboxTop:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                    Groupbox:Resize()
+                end)
+            )
+
             Groupbox:Resize()
             Tab.Groupboxes[Info.Name] = Groupbox
 
@@ -12746,6 +13090,41 @@ function Library:CreateWindow(WindowInfo)
 
             Library:PlayTabAnimation(Tab, true)
             Tab:RefreshSides()
+
+            for _, Groupbox in Tab.Groupboxes do
+                if Groupbox.Resize then
+                    Groupbox:Resize()
+                end
+            end
+            for _, Tabbox in Tab.Tabboxes do
+                if Tabbox.Resize then
+                    Tabbox:Resize()
+                end
+            end
+            for _, DepGroupbox in Tab.DependencyGroupboxes do
+                if DepGroupbox.Resize then
+                    DepGroupbox:Resize()
+                end
+            end
+
+            task.defer(function()
+                if Tab.Destroyed or Library.ActiveTab ~= Tab then return end
+                for _, Groupbox in Tab.Groupboxes do
+                    if Groupbox.Resize then
+                        Groupbox:Resize()
+                    end
+                end
+                for _, Tabbox in Tab.Tabboxes do
+                    if Tabbox.Resize then
+                        Tabbox:Resize()
+                    end
+                end
+                for _, DepGroupbox in Tab.DependencyGroupboxes do
+                    if DepGroupbox.Resize then
+                        DepGroupbox:Resize()
+                    end
+                end
+            end)
 
             Library.ActiveTab = Tab
 
@@ -14016,12 +14395,12 @@ function Library:CreateWindow(WindowInfo)
                     Library:Toggle()
                 end,
                 ExcludeScaling = true,
-                ExcludeDragging = true,
+                ExcludeDragging = false,
             })
         else
             ToggleButton = Library:AddDraggableButton("Toggle", function()
                 Library:Toggle()
-            end, true, true)
+            end, true, false)
         end
 
         local LockButton
