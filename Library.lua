@@ -11128,10 +11128,12 @@ function Library:CreateWindow(WindowInfo)
         --// Footer \\-
         FooterLabel = New("TextLabel", {
             BackgroundTransparency = 1,
+            FontFace = "Font",
             Size = UDim2.fromScale(1, 1),
             Text = WindowInfo.Footer,
+            TextColor3 = "FontColor",
             TextSize = 14,
-            TextTransparency = 0.5,
+            TextTransparency = 0,
             Parent = BottomBar,
         })
 
@@ -11156,7 +11158,7 @@ function Library:CreateWindow(WindowInfo)
 
         local WindowResizeIcon = New("ImageLabel", {
             ImageColor3 = "FontColor",
-            ImageTransparency = 0.5,
+            ImageTransparency = 0,
             Position = UDim2.fromOffset(2, 2),
             Size = UDim2.new(1, -4, 1, -4),
             Parent = ResizeButton,
