@@ -433,7 +433,7 @@ local Templates = {
 
         --// Animations \\--
         Animations = {
-            ToggleWindow = false,
+            ToggleWindow = true,
             TabSwitch = false,
             Groupbox = false,
             Dropdown = false,
@@ -3184,6 +3184,7 @@ function Library:AddDraggableButton(...)
     }
 
     local Button = New("TextButton", {
+        Active = true,
         BackgroundColor3 = BackgroundColor3 or "BackgroundColor",
         Position = UDim2.fromOffset(6, 6),
         Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
@@ -3227,49 +3228,71 @@ function Library:AddDraggableButton(...)
         DraggableButton.IconLabel = IconLabel
     end
 
-    local DragMoved = false
-    local DragStartPos = nil
-    local LastClickTime = 0
+    if ExcludeDragging then
+        local LastClickTime = 0
+        table.insert(
+            DraggableButton.Connections,
+            Button.InputBegan:Connect(function(Input: InputObject)
+                if Input.UserInputType == Enum.UserInputType.Touch or Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    local Now = tick()
+                    if Now - LastClickTime < 0.03 then
+                        return
+                    end
+                    LastClickTime = Now
+                    Library:SafeCallback(Func, DraggableButton)
+                end
+            end)
+        )
+    else
+        local DragMoved = false
+        local DragStartPos = nil
+        local LastClickTime = 0
 
-    local function TriggerClick()
-        if DragMoved then
-            return
+        table.insert(
+            DraggableButton.Connections,
+            Button.InputBegan:Connect(function(Input: InputObject)
+                if not IsClickInput(Input) then
+                    return
+                end
+                DragStartPos = Input.Position
+                DragMoved = false
+            end)
+        )
+
+        table.insert(
+            DraggableButton.Connections,
+            UserInputService.InputChanged:Connect(function(Input: InputObject)
+                if DragStartPos and IsHoverInput(Input) then
+                    if (Input.Position - DragStartPos).Magnitude > 16 then
+                        DragMoved = true
+                    end
+                end
+            end)
+        )
+
+        table.insert(
+            DraggableButton.Connections,
+            Button.InputEnded:Connect(function(Input: InputObject)
+                if DragStartPos and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                    if (Input.Position - DragStartPos).Magnitude <= 16 and not DragMoved then
+                        local Now = tick()
+                        if Now - LastClickTime >= 0.05 then
+                            LastClickTime = Now
+                            Library:SafeCallback(Func, DraggableButton)
+                        end
+                    end
+                    DragStartPos = nil
+                    DragMoved = false
+                end
+            end)
+        )
+
+        Library:MakeDraggable(Button, Button, true)
+        if not table.find(Library.DraggableElements, Button) then
+            table.insert(Library.DraggableElements, Button)
         end
-        local Now = tick()
-        if Now - LastClickTime < 0.2 then
-            return
-        end
-        LastClickTime = Now
-        Library:SafeCallback(Func, DraggableButton)
+        PositionDraggable(Button, Button.Position)
     end
-
-    Button.InputBegan:Connect(function(Input: InputObject)
-        if not IsClickInput(Input) then
-            return
-        end
-        DragStartPos = Input.Position
-        DragMoved = false
-    end)
-
-    Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
-        if DragStartPos and IsHoverInput(Input) then
-            if (Input.Position - DragStartPos).Magnitude > 16 then
-                DragMoved = true
-            end
-        end
-    end))
-
-    Button.Activated:Connect(TriggerClick)
-
-    Button.InputEnded:Connect(function(Input: InputObject)
-        if DragStartPos and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
-            if (Input.Position - DragStartPos).Magnitude <= 16 and not DragMoved then
-                TriggerClick()
-            end
-            DragStartPos = nil
-            DragMoved = false
-        end
-    end)
 
     function DraggableButton:SetText(NewText: string)
         if not NewText then
@@ -3290,17 +3313,10 @@ function Library:AddDraggableButton(...)
         end
     end
 
-    Library:MakeDraggable(Button, Button, true)
     if not Icon and Text then
         DraggableButton:SetText(Text)
     end
     DraggableButton.Button = Button
-
-    if not table.find(Library.DraggableElements, Button) then
-        table.insert(Library.DraggableElements, Button)
-    end
-
-    PositionDraggable(Button, Button.Position)
 
     function DraggableButton:Destroy()
         DraggableButton.Destroyed = true
@@ -10780,6 +10796,10 @@ function Library:CreateWindow(WindowInfo)
 
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
+    local WindowScale
+    local SavedWindowPosition = nil
+    local ActiveToggleTweens = {}
+    local ActiveCloseTweenId = 0
     local DividerLine
     local TitleHolder
     local WindowTitle
@@ -10832,11 +10852,12 @@ function Library:CreateWindow(WindowInfo)
                 Parent = MainFrame,
             })
         )
+        WindowScale = New("UIScale", {
+            Parent = MainFrame,
+        })
         table.insert(
             Library.Scales,
-            New("UIScale", {
-                Parent = MainFrame,
-            })
+            WindowScale
         )
         Library:AddOutline(MainFrame)
         Library:MakeLine(MainFrame, {
@@ -10902,6 +10923,7 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
+        SavedWindowPosition = MainFrame.Position
 
         --// Top Bar \\-
         TopBar = New("Frame", {
@@ -11216,7 +11238,6 @@ function Library:CreateWindow(WindowInfo)
     local Window = {
         AllowModifiers = Library.AllowModifiers,
     }
-    local Fading = false
 
     local function SetUICorner(UICorner, Corner, HalfValue)
         local Current = UICorner[Corner]
@@ -13741,36 +13762,15 @@ function Library:CreateWindow(WindowInfo)
         return Dialog
     end
 
-    local GuiProperties = { "BackgroundTransparency" }
-    local ImageProperties = { "BackgroundTransparency", "ImageTransparency" }
-    local TextProperties = { "BackgroundTransparency", "TextTransparency" }
-    local StrokeProperties = { "Transparency" }
-
-    local function FadeInstance(Desc, Properties)
-        local Cache = TransparencyCache[Desc]
-        if not Cache then
-            Cache = {}
-            TransparencyCache[Desc] = Cache
+    local function GetBaseScale(): number
+        if WindowScale then
+            local Offset = tonumber(Library.ScalesOffset[WindowScale]) or 0
+            return math.max(0.1, (Library.DPIScale or 1) - Offset)
         end
-
-        for _, Prop in Properties do
-            if not Library.Toggled then
-                Cache[Prop] = Desc[Prop]
-            end
-
-            if Cache[Prop] ~= nil and Cache[Prop] ~= 1 then
-                TweenService:Create(Desc, Library.WindowAnimationInfo, {
-                    [Prop] = Library.Toggled and Cache[Prop] or 1,
-                }):Play()
-            end
-        end
+        return 1
     end
 
     function Window:Toggle(Value: boolean?)
-        if Fading then
-            return
-        end
-
         if Library.ActiveLoading then
             if Value == true then
                 return
@@ -13781,52 +13781,95 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
+        local PriorToggled = Library.Toggled
         if typeof(Value) == "boolean" then
             Library.Toggled = Value
         else
             Library.Toggled = not Library.Toggled
         end
 
-        if Library.Animations and Library.Animations.ToggleWindow == true then
-            local FadeTime = Library.WindowAnimationInfo.Time
-            Fading = true
+        if PriorToggled and not Library.Toggled and MainFrame then
+            SavedWindowPosition = MainFrame.Position
+        end
+
+        local BaseScale = GetBaseScale()
+        local Animate = (WindowInfo.Animations and WindowInfo.Animations.ToggleWindow ~= false)
+            or (Library.Animations and Library.Animations.ToggleWindow ~= false)
+
+        if Animate and WindowScale and MainFrame then
+            for _, Tween in ActiveToggleTweens do
+                pcall(function() Tween:Cancel() end)
+            end
+            table.clear(ActiveToggleTweens)
+
+            local ScaleRatio = 0.86
+            local TargetPos = SavedWindowPosition or MainFrame.Position
+            SavedWindowPosition = TargetPos
+
+            local HalfW = (MainFrame.Size.X.Offset * (1 - ScaleRatio) * BaseScale) / 2
+            local HalfH = (MainFrame.Size.Y.Offset * (1 - ScaleRatio) * BaseScale) / 2
 
             if Library.Toggled then
+                local StartPos = UDim2.new(
+                    TargetPos.X.Scale,
+                    TargetPos.X.Offset + HalfW,
+                    TargetPos.Y.Scale,
+                    TargetPos.Y.Offset + HalfH + 12
+                )
+
+                if not MainFrame.Visible or WindowScale.Scale <= (BaseScale * 0.88) then
+                    WindowScale.Scale = BaseScale * ScaleRatio
+                    MainFrame.Position = StartPos
+                end
+
                 MainFrame.Visible = true
-            end
 
-            if Library.Toggled then
-                FadeInstance(MainFrame, { "BackgroundTransparency" })
-                task.wait(FadeTime / 2)
+                local OpenTweenInfo = TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+                local ScaleTween = TweenService:Create(WindowScale, OpenTweenInfo, { Scale = BaseScale })
+                local PosTween = TweenService:Create(MainFrame, OpenTweenInfo, { Position = TargetPos })
+
+                table.insert(ActiveToggleTweens, ScaleTween)
+                table.insert(ActiveToggleTweens, PosTween)
+
+                ScaleTween:Play()
+                PosTween:Play()
             else
-                task.delay(FadeTime / 2, FadeInstance, MainFrame, { "BackgroundTransparency" })
-            end
+                local EndPos = UDim2.new(
+                    TargetPos.X.Scale,
+                    TargetPos.X.Offset + HalfW,
+                    TargetPos.Y.Scale,
+                    TargetPos.Y.Offset + HalfH + 10
+                )
 
-            for _, Instance in MainFrame:GetDescendants() do
-                if Instance == TopBar then
-                    continue
-                end
+                local CloseTweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                local ScaleTween = TweenService:Create(WindowScale, CloseTweenInfo, { Scale = BaseScale * ScaleRatio })
+                local PosTween = TweenService:Create(MainFrame, CloseTweenInfo, { Position = EndPos })
 
-                if Instance:IsA("GuiObject") then
-                    local ClassName = Instance.ClassName
-                    if ClassName == "ImageLabel" or ClassName == "ImageButton" then
-                        FadeInstance(Instance, ImageProperties)
-                    elseif ClassName == "TextLabel" or ClassName == "TextBox" or ClassName == "TextButton" then
-                        FadeInstance(Instance, TextProperties)
-                    else
-                        FadeInstance(Instance, GuiProperties)
+                table.insert(ActiveToggleTweens, ScaleTween)
+                table.insert(ActiveToggleTweens, PosTween)
+
+                local CloseId = tick()
+                ActiveCloseTweenId = CloseId
+
+                ScaleTween:Play()
+                PosTween:Play()
+
+                ScaleTween.Completed:Once(function()
+                    if ActiveCloseTweenId == CloseId and not Library.Toggled then
+                        MainFrame.Visible = false
+                        MainFrame.Position = TargetPos
+                        WindowScale.Scale = BaseScale
                     end
-                elseif Instance.ClassName == "UIStroke" then
-                    FadeInstance(Instance, StrokeProperties)
-                end
+                end)
             end
-
-            task.delay(FadeTime, function()
-                MainFrame.Visible = Library.Toggled
-                Fading = false
-            end)
         else
             MainFrame.Visible = Library.Toggled
+            if WindowScale then
+                WindowScale.Scale = BaseScale
+            end
+            if SavedWindowPosition then
+                MainFrame.Position = SavedWindowPosition
+            end
         end
 
         if WindowInfo.UnlockMouseWhileOpen then
