@@ -374,7 +374,7 @@ local Templates = {
     --// Library \\--
     Window = {
         Title = "No Title",
-        Footer = "No Footer",
+        Footer = "",
 
         Position = UDim2.fromOffset(6, 6),
         Size = UDim2.fromOffset(930, 730),
@@ -11071,9 +11071,10 @@ function Library:CreateWindow(WindowInfo)
     local Container
     local BackgroundImage
     local HasBackgroundImage = false
-    local BottomBackground
     local FooterLabel
     local TopBar
+    local TitleTextHolder
+    local TitleHolderPadding
     local ProfileHolder
     local ProfileLine
     local ProfileAvatar
@@ -11082,7 +11083,7 @@ function Library:CreateWindow(WindowInfo)
     local ProfileUsername
     local ProfileHeight = 50
     local HasProfile = WindowInfo.ShowProfile ~= false
-    local TabsBottomOffset = HasProfile and (70 + ProfileHeight + 1) or 70
+    local TabsBottomOffset = HasProfile and (49 + ProfileHeight + 1) or 49
     local WindowSnapConfig = {
         Enabled = WindowInfo.Snapping,
         Distance = WindowInfo.SnapDistance,
@@ -11135,7 +11136,7 @@ function Library:CreateWindow(WindowInfo)
         DividerLine = New("Frame", {
             BackgroundColor3 = "OutlineColor",
             Position = UDim2.fromOffset(InitialLeftWidth, 0),
-            Size = UDim2.new(0, 1, 1, -21),
+            Size = UDim2.new(0, 1, 1, 0),
             Parent = MainFrame,
             ZIndex = 2
         })
@@ -11183,13 +11184,19 @@ function Library:CreateWindow(WindowInfo)
         TitleHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(0, InitialLeftWidth, 1, 0),
+            ClipsDescendants = true,
             Parent = TopBar,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
-            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
             VerticalAlignment = Enum.VerticalAlignment.Center,
-            Padding = UDim.new(0, 6),
+            Padding = UDim.new(0, 8),
+            Parent = TitleHolder,
+        })
+        TitleHolderPadding = New("UIPadding", {
+            PaddingLeft = UDim.new(0, 12),
+            PaddingRight = UDim.new(0, 8),
             Parent = TitleHolder,
         })
 
@@ -11213,18 +11220,48 @@ function Library:CreateWindow(WindowInfo)
             })
         end
 
-        local X = Library:GetTextBounds(
-            WindowInfo.Title,
-            Library.Scheme.Font,
-            20,
-            TitleHolder.AbsoluteSize.X - (WindowInfo.Icon and WindowInfo.IconSize.X.Offset + 6 or 0) - 12
-        )
+        local HasValidFooter = WindowInfo.Footer ~= nil and WindowInfo.Footer ~= "" and WindowInfo.Footer ~= "No Footer"
+
+        TitleTextHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -(WindowInfo.Icon and (WindowInfo.IconSize.X.Offset + 8) or 0), 1, 0),
+            ClipsDescendants = true,
+            Parent = TitleHolder,
+        })
+
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 1),
+            Parent = TitleTextHolder,
+        })
+
         WindowTitle = New("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(0, X, 1, 0),
+            FontFace = "Font",
+            Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24),
             Text = WindowInfo.Title,
-            TextSize = 20,
-            Parent = TitleHolder,
+            TextColor3 = "FontColor",
+            TextSize = if HasValidFooter then 16 else 19,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = TitleTextHolder,
+        })
+
+        FooterLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            FontFace = "Font",
+            Size = UDim2.new(1, 0, 0, 14),
+            Text = if HasValidFooter then WindowInfo.Footer else "",
+            TextColor3 = function()
+                return Library:GetDarkerColor(Library.Scheme.FontColor)
+            end,
+            TextSize = 12,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Visible = HasValidFooter,
+            Parent = TitleTextHolder,
         })
 
         --// Top Right Bar \\--
@@ -11362,59 +11399,16 @@ function Library:CreateWindow(WindowInfo)
             Library:ApplyLucideIcon(MoveIconImage, MoveIcon)
         end
 
-        --// Bottom Bar \\--
-        BottomBackground = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
-            Parent = MainFrame
-        })
-        Library:MakeLine(MainFrame, {
-            AnchorPoint = Vector2.new(0, 1),
-            Position = UDim2.new(0, 0, 1, -20),
-            Size = UDim2.new(1, 0, 0, 1),
-        })
-
-        local BottomBar = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 20),
-            Parent = MainFrame,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = BottomBackground,
-            })
-        )
-
-        --// Footer \\-
-        FooterLabel = New("TextLabel", {
-            BackgroundTransparency = 1,
-            FontFace = "Font",
-            Size = UDim2.fromScale(1, 1),
-            Text = WindowInfo.Footer,
-            TextColor3 = "FontColor",
-            TextSize = 14,
-            TextTransparency = 0,
-            Parent = BottomBar,
-        })
-
         --// Resize Button \\--
         if WindowInfo.Resizable then
             ResizeButton = New("TextButton", {
-                AnchorPoint = Vector2.new(1, 0),
+                AnchorPoint = Vector2.new(1, 1),
                 BackgroundTransparency = 1,
-                Position = UDim2.new(1, -WindowInfo.CornerRadius / 4, 0, 0),
-                Size = UDim2.fromScale(1, 1),
-                SizeConstraint = Enum.SizeConstraint.RelativeYY,
+                Position = UDim2.new(1, -2, 1, -2),
+                Size = UDim2.fromOffset(18, 18),
                 Text = "",
-                Parent = BottomBar,
+                ZIndex = 5,
+                Parent = MainFrame,
             })
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
@@ -11422,17 +11416,20 @@ function Library:CreateWindow(WindowInfo)
                     Tab:Resize(true)
                 end
             end)
-        end
 
-        local WindowResizeIcon = New("ImageLabel", {
-            ImageColor3 = "FontColor",
-            ImageTransparency = 0,
-            Position = UDim2.fromOffset(2, 2),
-            Size = UDim2.new(1, -4, 1, -4),
-            Parent = ResizeButton,
-        })
-        if ResizeIcon then
-            Library:ApplyLucideIcon(WindowResizeIcon, ResizeIcon)
+            local WindowResizeIcon = New("ImageLabel", {
+                ImageColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.FontColor, -40)
+                end,
+                ImageTransparency = 0.4,
+                Position = UDim2.fromOffset(2, 2),
+                Size = UDim2.new(1, -4, 1, -4),
+                ZIndex = 5,
+                Parent = ResizeButton,
+            })
+            if ResizeIcon then
+                Library:ApplyLucideIcon(WindowResizeIcon, ResizeIcon)
+            end
         end
 
         --// Profile \\--
@@ -11447,7 +11444,7 @@ function Library:CreateWindow(WindowInfo)
             ProfileHolder = New("Frame", {
                 AnchorPoint = Vector2.new(0, 1),
                 BackgroundTransparency = 1,
-                Position = UDim2.new(0, 0, 1, -21),
+                Position = UDim2.fromScale(0, 1),
                 Size = UDim2.new(0, InitialLeftWidth, 0, ProfileHeight),
                 ClipsDescendants = true,
                 Parent = MainFrame,
@@ -11455,7 +11452,7 @@ function Library:CreateWindow(WindowInfo)
 
             ProfileLine = Library:MakeLine(MainFrame, {
                 AnchorPoint = Vector2.new(0, 1),
-                Position = UDim2.new(0, 0, 1, -21 - ProfileHeight),
+                Position = UDim2.new(0, 0, 1, -ProfileHeight),
                 Size = UDim2.new(0, InitialLeftWidth, 0, 1),
             })
 
@@ -11584,7 +11581,7 @@ function Library:CreateWindow(WindowInfo)
             BorderSizePixel = 0,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
-            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
+            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -49),
             Parent = MainFrame,
         })
         New("UIPadding", {
@@ -11681,8 +11678,12 @@ function Library:CreateWindow(WindowInfo)
     function Window:SetFooter(Footer: string)
         assert(typeof(Footer) == "string", "Expected string for footer got: " .. typeof(Footer))
 
-        FooterLabel.Text = Footer
         WindowInfo.Footer = Footer
+        local HasValidFooter = Footer ~= "" and Footer ~= "No Footer"
+        FooterLabel.Text = Footer
+        FooterLabel.Visible = HasValidFooter
+        WindowTitle.Size = UDim2.new(1, 0, 0, if HasValidFooter then 18 else 24)
+        WindowTitle.TextSize = if HasValidFooter then 16 else 19
     end
 
     function Window:SetProfile(ProfileConfig: { [string]: any })
@@ -11711,7 +11712,7 @@ function Library:CreateWindow(WindowInfo)
             if ProfileLine then
                 ProfileLine.Visible = HasProfile
             end
-            TabsBottomOffset = if HasProfile then (70 + ProfileHeight + 1) else 70
+            TabsBottomOffset = if HasProfile then (49 + ProfileHeight + 1) else 49
             Tabs.Size = UDim2.new(0, Window:GetSidebarWidth(), 1, -TabsBottomOffset)
         end
     end
@@ -11767,8 +11768,9 @@ function Library:CreateWindow(WindowInfo)
         Library.CornerRadius = Radius
         WindowInfo.CornerRadius = Radius
 
-        ResizeButton.Position = UDim2.new(1, -Radius / 4, 0, 0)
-        BottomBackground.Size = UDim2.new(1, 0, 0, 20 + Radius)
+        if ResizeButton then
+            ResizeButton.Position = UDim2.new(1, -math.max(2, math.floor(Radius / 4)), 1, -math.max(2, math.floor(Radius / 4)))
+        end
 
         for _, Menu in Library.ContextMenus do
             if Menu.Destroyed then
@@ -11859,6 +11861,12 @@ function Library:CreateWindow(WindowInfo)
         end
 
         WindowTitle.Visible = not IsCompact
+        if TitleTextHolder then
+            TitleTextHolder.Visible = not IsCompact
+        end
+        if TitleHolderPadding then
+            TitleHolderPadding.PaddingLeft = UDim.new(0, if IsCompact then math.floor(math.max(0, WindowInfo.SidebarCompactWidth - WindowInfo.IconSize.X.Offset) / 2) else 12)
+        end
         if not WindowInfo.Icon then
             WindowIcon.Visible = IsCompact
         end
@@ -11904,11 +11912,12 @@ function Library:CreateWindow(WindowInfo)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
         DividerLine.Position = UDim2.fromOffset(Width, 0)
+        DividerLine.Size = UDim2.new(0, 1, 1, 0)
 
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
         Tabs.Size = UDim2.new(0, Width, 1, -TabsBottomOffset)
-        Container.Size = UDim2.new(1, -Width - 1, 1, -70)
+        Container.Size = UDim2.new(1, -Width - 1, 1, -49)
 
         if ProfileHolder then
             ProfileHolder.Size = UDim2.new(0, Width, 0, ProfileHeight)
