@@ -10,6 +10,7 @@ local UserInputService: UserInputService = cloneref(game:GetService("UserInputSe
 local TextService: TextService = cloneref(game:GetService("TextService"))
 local Teams: Teams = cloneref(game:GetService("Teams"))
 local TweenService: TweenService = cloneref(game:GetService("TweenService"))
+local Lighting: Lighting = cloneref(game:GetService("Lighting"))
 
 local getgenv = getgenv or function()
     return shared
@@ -172,6 +173,8 @@ local Library = {
     ScreenGui = nil,
     Floats = nil,
     Overlay = nil,
+    ActiveDropdownModal = nil,
+    MainFrame = nil,
 
     Window = nil,
     WindowContainer = nil,
@@ -4147,6 +4150,13 @@ Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObje
             )
         then
             CurrentMenu:Close()
+        end
+
+        if Library.ActiveDropdownModal and Library.ActiveDropdownModal.ActiveModal then
+            local Modal = Library.ActiveDropdownModal.ModalFrame
+            if Modal and not Library:MouseIsOverFrame(Modal, Location) then
+                Library.ActiveDropdownModal:Close()
+            end
         end
     end
 end))
@@ -8380,6 +8390,13 @@ do
         return Slider
     end
 
+    pcall(function()
+        local OldBlur = Lighting:FindFirstChild("WislDropdownBlur")
+        if OldBlur then
+            OldBlur:Destroy()
+        end
+    end)
+
     function Funcs:AddDropdown(Idx, Info)
         if self.Destroyed then return nil end
 
@@ -8571,63 +8588,537 @@ do
             return ValueImage
         end
 
-        local MenuTable
-        MenuTable = Library:AddContextMenu(
-            DisplayContainer,
-            function()
-                return UDim2.fromOffset((DisplayContainer.AbsoluteSize.X / Library.DPIScale), 0)
-            end,
-            function()
-                return { 0.5, DisplayContainer.AbsoluteSize.Y + 1.5 }
-            end,
-            2,
-            function(Active: boolean)
-                DisplayButton.TextTransparency = (Active and SearchBox) and 1 or 0
+        local TargetWindow = Holder:FindFirstAncestor("Main")
+            or Library.MainFrame
+            or (Library.Window and Library.Window.MainFrame)
 
-                ArrowImage.ImageTransparency = Active and 0 or 0.5
-                ArrowImage.Rotation = Active and 180 or 0
+        if not TargetWindow then
+            local HolderGui = Holder:FindFirstAncestorOfClass("ScreenGui")
+            if HolderGui and HolderGui ~= ScreenGui and Library.ActiveLoading and HolderGui == Library.ActiveLoading.ScreenGui then
+                TargetWindow = HolderGui
+            else
+                TargetWindow = Overlay
+            end
+        end
 
-                if SearchBox then
-                    SearchBox.Text = ""
-                    SearchBox.Visible = Active
-                end
-
-                local Half = UDim.new(0, Library.CornerRadius / 2)
-                local Zero = UDim.new(0, 0)
-
-                DropdownCorner.TopLeftRadius = Half
-                DropdownCorner.TopRightRadius = Half
-                DropdownCorner.BottomRightRadius = Active and Zero or Half
-                DropdownCorner.BottomLeftRadius = Active and Zero or Half
-
-                local MenuCorner = MenuTable and MenuTable.Corner
-                if MenuCorner then
-                    MenuCorner.TopLeftRadius = Zero
-                    MenuCorner.TopRightRadius = Zero
-                    MenuCorner.BottomRightRadius = Half
-                    MenuCorner.BottomLeftRadius = Half
-                end
-            end,
-            false,
-            "bottom",
-            "Dropdown"
+        local DropdownOverlay = New("TextButton", {
+            AutoButtonColor = false,
+            BackgroundColor3 = "DarkColor",
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(0, 0),
+            Size = UDim2.fromScale(1, 1),
+            Text = "",
+            Active = true,
+            ZIndex = 8500,
+            Visible = false,
+            ClipsDescendants = true,
+            Parent = TargetWindow,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = DropdownOverlay,
+            })
         )
+
+        local ModalFrame = New("TextButton", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.new(0.74, 0, 0.8, 0),
+            Text = "",
+            AutoButtonColor = false,
+            Active = true,
+            ClipsDescendants = true,
+            ZIndex = 8501,
+            Parent = DropdownOverlay,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = ModalFrame,
+            })
+        )
+        Library:AddOutline(ModalFrame)
+
+        local ModalScale = New("UIScale", {
+            Scale = 1,
+            Parent = ModalFrame,
+        })
+        table.insert(Library.Scales, ModalScale)
+
+        New("UISizeConstraint", {
+            MinSize = Vector2.new(240, 220),
+            MaxSize = Vector2.new(440, 440),
+            Parent = ModalFrame,
+        })
+
+        Dropdown.ModalFrame = ModalFrame
+
+        local ModalHeader = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.new(1, 0, 0, 42),
+            ZIndex = 2,
+            Parent = ModalFrame,
+        })
+
+        local HeaderIconImg = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            ImageColor3 = "AccentColor",
+            Position = UDim2.new(0, 14, 0.5, 0),
+            Size = UDim2.fromOffset(18, 18),
+            ZIndex = 2,
+            Parent = ModalHeader,
+        })
+        local HeaderLucide = Library:GetCustomIcon("list")
+        if HeaderLucide then
+            Library:ApplyLucideIcon(HeaderIconImg, HeaderLucide)
+        end
+
+        local HeaderTitle = New("TextLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 38, 0.5, 0),
+            Size = UDim2.new(1, -78, 1, 0),
+            Text = Dropdown.Text or "Select Option",
+            TextSize = 15,
+            TextColor3 = "FontColor",
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 2,
+            Parent = ModalHeader,
+        })
+
+        local CloseButton = New("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = "MainColor",
+            BackgroundTransparency = 0.5,
+            Position = UDim2.new(1, -10, 0.5, 0),
+            Size = UDim2.fromOffset(26, 26),
+            Text = "",
+            AutoButtonColor = false,
+            ZIndex = 2,
+            Parent = ModalHeader,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, 6),
+            Parent = CloseButton,
+        })
+        New("UIStroke", {
+            Color = "OutlineColor",
+            Transparency = 0.5,
+            Parent = CloseButton,
+        })
+
+        local CloseIconImg = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            ImageColor3 = "FontColor",
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(14, 14),
+            ZIndex = 2,
+            Parent = CloseButton,
+        })
+        local CloseIconData = Library:GetCustomIcon("x")
+        if CloseIconData then
+            Library:ApplyLucideIcon(CloseIconImg, CloseIconData)
+        else
+            CloseButton.Text = "✕"
+            CloseButton.TextSize = 13
+            CloseButton.TextColor3 = Library.Scheme.FontColor
+        end
+
+        table.insert(Dropdown.Connections, CloseButton.MouseEnter:Connect(function()
+            TweenService:Create(CloseButton, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.DestructiveColor or Library.Scheme.RedColor,
+                BackgroundTransparency = 0.2,
+            }):Play()
+        end))
+
+        table.insert(Dropdown.Connections, CloseButton.MouseLeave:Connect(function()
+            TweenService:Create(CloseButton, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.MainColor,
+                BackgroundTransparency = 0.5,
+            }):Play()
+        end))
+
+        table.insert(Dropdown.Connections, CloseButton.MouseButton1Click:Connect(function()
+            Dropdown:Close()
+        end))
+
+        New("Frame", {
+            BackgroundColor3 = "OutlineColor",
+            BackgroundTransparency = 0.5,
+            Position = UDim2.new(0, 0, 0, 42),
+            Size = UDim2.new(1, 0, 0, 1),
+            ZIndex = 2,
+            Parent = ModalFrame,
+        })
+
+        local ModalSearchContainer = New("Frame", {
+            BackgroundColor3 = "MainColor",
+            Position = UDim2.new(0, 14, 0, 50),
+            Size = UDim2.new(1, -28, 0, 32),
+            ZIndex = 2,
+            Parent = ModalFrame,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(0, 6),
+            Parent = ModalSearchContainer,
+        })
+        local SearchStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Thickness = 1,
+            Parent = ModalSearchContainer,
+        })
+
+        local ModalSearchIcon = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            ImageColor3 = "FontColor",
+            ImageTransparency = 0.5,
+            Position = UDim2.new(0, 8, 0.5, 0),
+            Size = UDim2.fromOffset(16, 16),
+            ZIndex = 2,
+            Parent = ModalSearchContainer,
+        })
+        local SearchLucide = Library:GetCustomIcon("search")
+        if SearchLucide then
+            Library:ApplyLucideIcon(ModalSearchIcon, SearchLucide)
+        end
+
+        local ModalSearchInput = New("TextBox", {
+            BackgroundTransparency = 1,
+            ClearTextOnFocus = false,
+            PlaceholderText = "Search...",
+            Position = UDim2.new(0, 28, 0, 0),
+            Size = UDim2.new(1, -56, 1, 0),
+            Text = "",
+            TextSize = 13,
+            TextColor3 = "FontColor",
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 2,
+            Parent = ModalSearchContainer,
+        })
+
+        local ClearSearchButton = New("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -6, 0.5, 0),
+            Size = UDim2.fromOffset(18, 18),
+            Text = "✕",
+            TextSize = 11,
+            TextColor3 = "FontColor",
+            TextTransparency = 0.5,
+            Visible = false,
+            ZIndex = 2,
+            Parent = ModalSearchContainer,
+        })
+
+        table.insert(Dropdown.Connections, ClearSearchButton.MouseButton1Click:Connect(function()
+            ModalSearchInput.Text = ""
+        end))
+
+        table.insert(Dropdown.Connections, ModalSearchInput.Focused:Connect(function()
+            TweenService:Create(SearchStroke, Library.TweenInfo, {
+                Color = Library.Scheme.AccentColor,
+            }):Play()
+        end))
+
+        table.insert(Dropdown.Connections, ModalSearchInput.FocusLost:Connect(function()
+            TweenService:Create(SearchStroke, Library.TweenInfo, {
+                Color = Library.Scheme.OutlineColor,
+            }):Play()
+        end))
+
+        local ScrollThickness = Library.IsMobile and 6 or 4
+        local ListPaddingTop = 8
+
+        local ModalList = New("ScrollingFrame", {
+            BackgroundTransparency = 1,
+            CanvasSize = UDim2.fromOffset(0, 0),
+            Position = UDim2.new(0, 0, 0, 90),
+            ScrollBarThickness = 0,
+            Size = UDim2.new(1, 0, 1, -104),
+            VerticalScrollBarInset = Enum.ScrollBarInset.None,
+            ZIndex = 2,
+            Parent = ModalFrame,
+        })
+
+        local ScrollTrack = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundColor3 = "MainColor",
+            BackgroundTransparency = 0.7,
+            Position = UDim2.new(1, -4, 0, 98),
+            Size = UDim2.new(0, ScrollThickness, 1, -112),
+            Visible = false,
+            ZIndex = 3,
+            Parent = ModalFrame,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ScrollTrack,
+        })
+
+        local ScrollThumb = New("TextButton", {
+            AutoButtonColor = false,
+            BackgroundColor3 = "OutlineColor",
+            BackgroundTransparency = 0.2,
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(1, 0, 0, 30),
+            Text = "",
+            ZIndex = 4,
+            Parent = ScrollTrack,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ScrollThumb,
+        })
+
+        local function UpdateCustomScrollBar()
+            local WindowHeight = ModalList.AbsoluteWindowSize.Y
+            local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+            local TrackHeight = ScrollTrack.AbsoluteSize.Y
+
+            if CanvasHeight <= WindowHeight or TrackHeight <= 0 then
+                ScrollTrack.Visible = false
+                return
+            end
+
+            ScrollTrack.Visible = true
+            local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+            local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+            local MaxScroll = CanvasHeight - WindowHeight
+            local ScrollProgress = if MaxScroll > 0 then math.clamp(ModalList.CanvasPosition.Y / MaxScroll, 0, 1) else 0
+            local ThumbPos = math.floor(ScrollProgress * (TrackHeight - ThumbHeight))
+
+            ScrollThumb.Size = UDim2.new(1, 0, 0, ThumbHeight)
+            ScrollThumb.Position = UDim2.new(0, 0, 0, ThumbPos)
+        end
+
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("CanvasPosition"):Connect(UpdateCustomScrollBar))
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(UpdateCustomScrollBar))
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(UpdateCustomScrollBar))
+
+        local DraggingThumb = false
+        local DragStartY = 0
+        local DragStartCanvasY = 0
+
+        table.insert(Dropdown.Connections, ScrollThumb.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                DraggingThumb = true
+                DragStartY = Input.Position.Y
+                DragStartCanvasY = ModalList.CanvasPosition.Y
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.AccentColor,
+                    BackgroundTransparency = 0,
+                }):Play()
+            end
+        end))
+
+        table.insert(Dropdown.Connections, ScrollTrack.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                local RelativeY = Input.Position.Y - ScrollTrack.AbsolutePosition.Y
+                local TrackHeight = ScrollTrack.AbsoluteSize.Y
+                local WindowHeight = ModalList.AbsoluteWindowSize.Y
+                local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+                local MaxScroll = CanvasHeight - WindowHeight
+                if MaxScroll > 0 and TrackHeight > 0 then
+                    local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+                    local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+                    local ScrollableTrack = TrackHeight - ThumbHeight
+                    if ScrollableTrack > 0 then
+                        local Progress = math.clamp((RelativeY - ThumbHeight / 2) / ScrollableTrack, 0, 1)
+                        ModalList.CanvasPosition = Vector2.new(0, Progress * MaxScroll)
+                    end
+                end
+            end
+        end))
+
+        table.insert(Dropdown.Connections, UserInputService.InputChanged:Connect(function(Input)
+            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+                local DeltaY = Input.Position.Y - DragStartY
+                local TrackHeight = ScrollTrack.AbsoluteSize.Y
+                local WindowHeight = ModalList.AbsoluteWindowSize.Y
+                local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+                local MaxScroll = CanvasHeight - WindowHeight
+                if MaxScroll > 0 and TrackHeight > 0 then
+                    local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+                    local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+                    local ScrollableTrack = TrackHeight - ThumbHeight
+                    if ScrollableTrack > 0 then
+                        local ScrollDelta = (DeltaY / ScrollableTrack) * MaxScroll
+                        ModalList.CanvasPosition = Vector2.new(0, math.clamp(DragStartCanvasY + ScrollDelta, 0, MaxScroll))
+                    end
+                end
+            end
+        end))
+
+        local function StopThumbDrag(Input)
+            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                DraggingThumb = false
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.OutlineColor,
+                    BackgroundTransparency = 0.2,
+                }):Play()
+            end
+        end
+
+        table.insert(Dropdown.Connections, UserInputService.InputEnded:Connect(StopThumbDrag))
+
+        table.insert(Dropdown.Connections, ScrollThumb.MouseEnter:Connect(function()
+            if not DraggingThumb then
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundTransparency = 0.05,
+                }):Play()
+            end
+        end))
+
+        table.insert(Dropdown.Connections, ScrollThumb.MouseLeave:Connect(function()
+            if not DraggingThumb then
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundTransparency = 0.2,
+                }):Play()
+            end
+        end))
+
+        local EmptyLabel = New("TextLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.new(1, -20, 0, 30),
+            Text = "No options found",
+            TextSize = 14,
+            TextColor3 = "FontColor",
+            TextTransparency = 0.6,
+            Visible = false,
+            ZIndex = 2,
+            Parent = ModalList,
+        })
+
+        table.insert(Dropdown.Connections, DropdownOverlay.MouseButton1Click:Connect(function()
+            Dropdown:Close()
+        end))
+
+        Dropdown.ActiveModal = false
+
+        function Dropdown:Open()
+            if Dropdown.Disabled or Dropdown.ActiveModal or Library.Unloaded then
+                return
+            end
+
+            if Library.ActiveDropdownModal and Library.ActiveDropdownModal ~= Dropdown then
+                Library.ActiveDropdownModal:Close()
+            end
+
+            Library.ActiveDropdownModal = Dropdown
+            Dropdown.ActiveModal = true
+            if Dropdown.Menu then
+                Dropdown.Menu.Active = true
+            end
+
+            pcall(function()
+                local WSize = TargetWindow.AbsoluteSize
+                if WSize and WSize.X > 0 and WSize.Y > 0 then
+                    local TargetW = math.clamp(math.floor(WSize.X * 0.74), 240, 420)
+                    local TargetH = math.clamp(math.floor(WSize.Y * 0.80), 220, 420)
+                    ModalFrame.Size = UDim2.fromOffset(TargetW, TargetH)
+                end
+            end)
+
+            DropdownOverlay.BackgroundTransparency = 1
+            DropdownOverlay.Visible = true
+            ModalFrame.Visible = true
+            ModalScale.Scale = 0.92
+
+            TweenService:Create(DropdownOverlay, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundTransparency = 0.38,
+            }):Play()
+
+            TweenService:Create(ModalScale, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Scale = 1,
+            }):Play()
+
+            ArrowImage.Rotation = 180
+            ArrowImage.ImageTransparency = 0
+            DisplayStroke.Color = Library.Scheme.AccentColor
+
+            Dropdown:BuildDropdownList()
+        end
+
+        function Dropdown:Close()
+            if not Dropdown.ActiveModal then
+                return
+            end
+
+            DraggingThumb = false
+            Dropdown.ActiveModal = false
+            if Dropdown.Menu then
+                Dropdown.Menu.Active = false
+            end
+            if Library.ActiveDropdownModal == Dropdown then
+                Library.ActiveDropdownModal = nil
+            end
+
+            ArrowImage.Rotation = 0
+            ArrowImage.ImageTransparency = 0.5
+            DisplayStroke.Color = Library.Scheme.OutlineColor
+
+            local OverlayTween = TweenService:Create(DropdownOverlay, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                BackgroundTransparency = 1,
+            })
+            local ScaleTween = TweenService:Create(ModalScale, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Scale = 0.92,
+            })
+
+            OverlayTween:Play()
+            ScaleTween:Play()
+
+            ScaleTween.Completed:Once(function()
+                if not Dropdown.ActiveModal then
+                    DropdownOverlay.Visible = false
+                    ModalFrame.Visible = false
+                    if ModalSearchInput then
+                        ModalSearchInput.Text = ""
+                    end
+                end
+            end)
+        end
+
+        function Dropdown:Toggle()
+            if Dropdown.ActiveModal then
+                Dropdown:Close()
+            else
+                Dropdown:Open()
+            end
+        end
+
+        local MenuTable = {
+            Active = false,
+            Open = function() Dropdown:Open() end,
+            Close = function() Dropdown:Close() end,
+            Toggle = function() Dropdown:Toggle() end,
+            Destroy = function()
+                Dropdown:Close()
+                if DropdownOverlay then DropdownOverlay:Destroy() end
+            end,
+            Menu = ModalList,
+            SetSize = function() end,
+        }
         Dropdown.Menu = MenuTable
 
-        local ItemHeight = 21
-        local PoolSize = math.max(1, Info.MaxVisibleDropdownItems + 2)
-        local Pool = {}
         local FilteredEntries = {}
+        local RowCache = {}
 
         function Dropdown:RecalculateListSize(Count)
             local ItemCount = Count or #FilteredEntries
-            local Y = math.clamp(ItemCount * ItemHeight, 0, Info.MaxVisibleDropdownItems * ItemHeight)
-
-            MenuTable.Menu.CanvasSize = UDim2.fromOffset(0, ItemCount * ItemHeight)
-
-            MenuTable:SetSize(function()
-                return UDim2.fromOffset((DisplayContainer.AbsoluteSize.X / Library.DPIScale), Y)
-            end)
+            local ItemHeight = 36
+            local Spacing = 6
+            ModalList.CanvasSize = UDim2.fromOffset(0, ItemCount * (ItemHeight + Spacing) + 12)
         end
 
         function Dropdown:UpdateColors()
@@ -8638,7 +9129,7 @@ do
             Label.TextTransparency = Dropdown.Disabled and 0.8 or 0
             DisplayButton.TextTransparency = Dropdown.Disabled and 0.8 or 0
             DisplayImage.ImageTransparency = Dropdown.Disabled and 0.8 or 0
-            ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or MenuTable.Active and 0 or 0.5
+            ArrowImage.ImageTransparency = Dropdown.Disabled and 0.8 or Dropdown.ActiveModal and 0 or 0.5
         end
 
         function Dropdown:Display()
@@ -8734,7 +9225,12 @@ do
 
             --// Fuzzy-match dropdown values the same way the sidebar search
             --// does, so e.g. "clr" can find "Clear Inventory" in a list \\--
-            local SearchQuery = SearchBox and NormalizeSearch(SearchBox.Text:lower()) or ""
+            local SearchQuery = ""
+            if ModalSearchInput and ModalSearchInput.Text ~= "" then
+                SearchQuery = NormalizeSearch(ModalSearchInput.Text:lower())
+            elseif SearchBox and SearchBox.Text ~= "" then
+                SearchQuery = NormalizeSearch(SearchBox.Text:lower())
+            end
             local IsSearching = SearchQuery ~= ""
 
             local EnabledList, DisabledList = {}, {}
@@ -8802,58 +9298,6 @@ do
             end
         end
 
-        local function GetFirstVisibleIndex()
-            local Total = #FilteredEntries
-            if Total <= PoolSize then
-                return 1
-            end
-
-            local MaxFirst = Total - PoolSize + 1
-            local ScrollY = MenuTable.Menu.CanvasPosition.Y / Library.DPIScale
-            local Index = math.floor(ScrollY / ItemHeight) + 1
-            return math.clamp(Index, 1, MaxFirst)
-        end
-
-        function Dropdown:RefreshPool()
-            local Total = #FilteredEntries
-            local First = GetFirstVisibleIndex()
-
-            for SlotIndex, Row in Pool do
-                local DataIndex = First + SlotIndex - 1
-                local Entry = FilteredEntries[DataIndex]
-
-                Row.Entry = Entry
-                Row.Index = Entry and DataIndex or nil
-
-                if not Entry then
-                    Row.Container.Visible = false
-                    continue
-                end
-
-                Row.Container.Visible = true
-                Row.Container.Position = UDim2.fromOffset(0, (DataIndex - 1) * ItemHeight)
-
-                local IsLast = DataIndex == Total
-                Row.Corner.BottomRightRadius = IsLast and UDim.new(0, Library.CornerRadius / 2) or UDim.new(0, 0)
-                Row.Corner.BottomLeftRadius = IsLast and UDim.new(0, Library.CornerRadius / 2) or UDim.new(0, 0)
-
-                Row.Button.Text = Entry.FormattedValue
-
-                if Entry.ValueImage then
-                    Row.Image.Visible = true
-                    Library:ApplyLucideIcon(Row.Image, Entry.ValueImage)
-                    Row.Button.Size = UDim2.new(1, -18, 0, ItemHeight)
-                    Row.Button.Position = UDim2.fromOffset(18, 0)
-                else
-                    Row.Image.Visible = false
-                    Row.Button.Size = UDim2.new(1, 0, 0, ItemHeight)
-                    Row.Button.Position = UDim2.fromOffset(0, 0)
-                end
-
-                Row:UpdateButton()
-            end
-        end
-
         function Dropdown:RunChanged()
             if Dropdown.Disabled then
                 return
@@ -8864,144 +9308,114 @@ do
         end
 
         local function StopDragSelect()
-            DragSelecting = false
-            DragStartIndex = nil
-            DragPrevMin = nil
-            DragPrevMax = nil
-            DragLastIndex = nil
-            table.clear(DragInitialValues)
-
-            if DragInputEndedConn then
-                DragInputEndedConn:Disconnect()
-                DragInputEndedConn = nil
-            end
-
-            if DragInputChangedConn then
-                DragInputChangedConn:Disconnect()
-                DragInputChangedConn = nil
-            end
         end
 
-        local DragActiveCount = 0
+        local CheckIcon = Library:GetCustomIcon("check")
 
-        local function ApplyDragIndex(Index, InRange)
-            local Entry = FilteredEntries[Index]
-            if not Entry or Entry.IsDisabled then
-                return
-            end
-
-            local Try = DragInitialValues[Entry.Value]
-            if InRange then
-                Try = not Try
-            end
-
-            local WantActive = Try and true or false
-            local IsActive = Dropdown.Value[Entry.Value] and true or false
-            if WantActive == IsActive then
-                return
-            end
-
-            if not WantActive and DragActiveCount == 1 and not Info.AllowNull then
-                return
-            end
-
-            Dropdown.Value[Entry.Value] = WantActive and true or nil
-            DragActiveCount += WantActive and 1 or -1
-        end
-
-        local function ApplyDragRange(From, To, InRange)
-            for Index = From, To do
-                ApplyDragIndex(Index, InRange)
-            end
-        end
-
-        local function UpdateDrag(CurrentIndex)
-            if CurrentIndex == nil or CurrentIndex == DragLastIndex then
-                return
-            end
-
-            DragLastIndex = CurrentIndex
-
-            local Min = math.min(DragStartIndex, CurrentIndex)
-            local Max = math.max(DragStartIndex, CurrentIndex)
-            DragActiveCount = Dropdown:GetActiveValues(true)
-
-            if DragPrevMin == nil then
-                ApplyDragRange(Min, Max, true)
-            else
-                if DragPrevMin < Min then
-                    ApplyDragRange(DragPrevMin, Min - 1, false)
-                end
-                if DragPrevMax > Max then
-                    ApplyDragRange(Max + 1, DragPrevMax, false)
-                end
-                if Min < DragPrevMin then
-                    ApplyDragRange(Min, DragPrevMin - 1, true)
-                end
-                if Max > DragPrevMax then
-                    ApplyDragRange(DragPrevMax + 1, Max, true)
-                end
-            end
-
-            DragPrevMin = Min
-            DragPrevMax = Max
-
-            for _, OtherRow in Pool do
-                OtherRow:UpdateButton()
-            end
-        end
-
-        local function CreatePoolRow()
+        local function CreateModalRow()
             local Row = {
                 Entry = nil,
-                Index = nil
+                Index = nil,
+                Selected = false,
             }
 
-            local Container = New("Frame", {
+            local ItemBtn = New("TextButton", {
+                AnchorPoint = Vector2.new(0.5, 0),
                 BackgroundColor3 = "MainColor",
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, ItemHeight),
+                BackgroundTransparency = 0.6,
+                Position = UDim2.new(0.5, 0, 0, ListPaddingTop),
+                Size = UDim2.new(1, -28, 0, 36),
+                Text = "",
+                AutoButtonColor = false,
                 Visible = false,
-                Parent = MenuTable.Menu,
+                ZIndex = 2,
+                Parent = ModalList,
             })
 
-            local Corner = New("UICorner", {
-                TopLeftRadius = UDim.new(0, 0),
-                TopRightRadius = UDim.new(0, 0),
-                BottomRightRadius = UDim.new(0, 0),
-                BottomLeftRadius = UDim.new(0, 0),
-                Parent = Container,
-            }); table.insert(Library.SpecificCorners, Corner)
-
-            local Image = New("ImageLabel", {
-                BackgroundTransparency = 1,
-                Image = "",
-                ImageTransparency = 0.5,
-                Size = UDim2.fromOffset(16, 16),
-                Position = UDim2.fromOffset(4, 3),
-                Visible = false,
-                Parent = Container,
+            local ItemCorner = New("UICorner", {
+                CornerRadius = UDim.new(0, 6),
+                Parent = ItemBtn,
             })
 
-            local Button = New("TextButton", {
+            local ItemStroke = New("UIStroke", {
+                Color = "OutlineColor",
+                Transparency = 0.6,
+                Thickness = 1,
+                Parent = ItemBtn,
+            })
+
+            local AccentPill = New("Frame", {
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(0, 4, 0.5, 0),
+                Size = UDim2.fromOffset(3, 18),
+                Visible = false,
+                ZIndex = 2,
+                Parent = ItemBtn,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = AccentPill,
+            })
+
+            local ItemImg = New("ImageLabel", {
+                AnchorPoint = Vector2.new(0, 0.5),
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, ItemHeight),
+                Position = UDim2.new(0, 12, 0.5, 0),
+                Size = UDim2.fromOffset(18, 18),
+                Visible = false,
+                ZIndex = 2,
+                Parent = ItemBtn,
+            })
+
+            local ItemText = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(14, 0),
+                Size = UDim2.new(1, -50, 1, 0),
                 Text = "",
                 TextSize = 14,
-                TextTransparency = 0.5,
+                TextColor3 = "FontColor",
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Container,
-            })
-            New("UIPadding", {
-                PaddingLeft = UDim.new(0, 7),
-                PaddingRight = UDim.new(0, 7),
-                Parent = Button,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 2,
+                Parent = ItemBtn,
             })
 
-            Row.Container = Container
-            Row.Corner = Corner
-            Row.Image = Image
-            Row.Button = Button
+            local CheckMark
+            if CheckIcon then
+                CheckMark = New("ImageLabel", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundTransparency = 1,
+                    ImageColor3 = "AccentColor",
+                    Position = UDim2.new(1, -12, 0.5, 0),
+                    Size = UDim2.fromOffset(16, 16),
+                    Visible = false,
+                    ZIndex = 2,
+                    Parent = ItemBtn,
+                })
+                Library:ApplyLucideIcon(CheckMark, CheckIcon)
+            else
+                CheckMark = New("TextLabel", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(1, -12, 0.5, 0),
+                    Size = UDim2.fromOffset(16, 16),
+                    Text = "✓",
+                    TextColor3 = "AccentColor",
+                    TextSize = 14,
+                    Visible = false,
+                    ZIndex = 2,
+                    Parent = ItemBtn,
+                })
+            end
+
+            Row.Container = ItemBtn
+            Row.Corner = ItemCorner
+            Row.Stroke = ItemStroke
+            Row.AccentPill = AccentPill
+            Row.Image = ItemImg
+            Row.TextLabel = ItemText
+            Row.CheckMark = CheckMark
 
             function Row:UpdateButton()
                 local Entry = Row.Entry
@@ -9011,30 +9425,41 @@ do
 
                 local Selected
                 if Info.Multi then
-                    Selected = Dropdown.Value[Entry.Value]
+                    Selected = Dropdown.Value[Entry.Value] == true
                 else
                     Selected = Dropdown.Value == Entry.Value
                 end
 
                 Row.Selected = Selected and true or false
 
-                Container.BackgroundTransparency = Selected and 0 or 1
-                Button.TextTransparency = Entry.IsDisabled and 0.8 or Selected and 0 or 0.5
-
-                if Entry.ValueImage then
-                    Image.ImageTransparency = Entry.IsDisabled and 0.8 or Selected and 0 or 0.5
+                if Selected then
+                    ItemBtn.BackgroundTransparency = 0.2
+                    ItemStroke.Color = Library.Scheme.AccentColor
+                    ItemStroke.Transparency = 0
+                    AccentPill.Visible = true
+                    CheckMark.Visible = true
+                    ItemText.TextColor3 = Library.Scheme.FontColor
+                    ItemText.TextTransparency = 0
+                else
+                    ItemBtn.BackgroundTransparency = 0.6
+                    ItemStroke.Color = Library.Scheme.OutlineColor
+                    ItemStroke.Transparency = 0.6
+                    AccentPill.Visible = false
+                    CheckMark.Visible = false
+                    ItemText.TextColor3 = Library.Scheme.FontColor
+                    ItemText.TextTransparency = Entry.IsDisabled and 0.7 or 0.25
                 end
             end
 
-            table.insert(Dropdown.Connections, Button.MouseButton1Click:Connect(function()
+            table.insert(Dropdown.Connections, ItemBtn.MouseButton1Click:Connect(function()
                 local Entry = Row.Entry
-                if not Entry or Entry.IsDisabled or DragSelecting then
+                if not Entry or Entry.IsDisabled then
                     return
                 end
 
                 local Selected
                 if Info.Multi then
-                    Selected = Dropdown.Value[Entry.Value]
+                    Selected = Dropdown.Value[Entry.Value] == true
                 else
                     Selected = Dropdown.Value == Entry.Value
                 end
@@ -9048,8 +9473,10 @@ do
                         Dropdown.Value = Selected and Entry.Value or nil
                     end
 
-                    for _, OtherRow in Pool do
-                        OtherRow:UpdateButton()
+                    for _, OtherRow in RowCache do
+                        if OtherRow.Container.Visible then
+                            OtherRow:UpdateButton()
+                        end
                     end
                 end
 
@@ -9060,109 +9487,32 @@ do
                 Dropdown:RunChanged()
             end))
 
-            table.insert(Dropdown.Connections, Button.MouseEnter:Connect(function()
+            table.insert(Dropdown.Connections, ItemBtn.MouseEnter:Connect(function()
                 local Entry = Row.Entry
-                if not Entry or Entry.IsDisabled then
+                if not Entry or Entry.IsDisabled or Row.Selected then
                     return
                 end
 
-                if Row.Selected then
-                    return
-                end
-
-                TweenService:Create(Container, Library.TweenInfo, {
-                    BackgroundTransparency = 0.85,
+                TweenService:Create(ItemBtn, Library.TweenInfo, {
+                    BackgroundTransparency = 0.4,
                 }):Play()
-                TweenService:Create(Button, Library.TweenInfo, {
-                    TextTransparency = 0.25,
+                TweenService:Create(ItemStroke, Library.TweenInfo, {
+                    Transparency = 0.3,
                 }):Play()
-
-                if Image then
-                    TweenService:Create(Image, Library.TweenInfo, {
-                        ImageTransparency = 0.25,
-                    }):Play()
-                end
             end))
 
-            table.insert(Dropdown.Connections, Button.MouseLeave:Connect(function()
+            table.insert(Dropdown.Connections, ItemBtn.MouseLeave:Connect(function()
                 local Entry = Row.Entry
-                if not Entry or Entry.IsDisabled then
+                if not Entry or Entry.IsDisabled or Row.Selected then
                     return
                 end
 
-                if Row.Selected then
-                    return
-                end
-
-                TweenService:Create(Container, Library.TweenInfo, {
-                    BackgroundTransparency = 1,
+                TweenService:Create(ItemBtn, Library.TweenInfo, {
+                    BackgroundTransparency = 0.6,
                 }):Play()
-                TweenService:Create(Button, Library.TweenInfo, {
-                    TextTransparency = 0.5,
+                TweenService:Create(ItemStroke, Library.TweenInfo, {
+                    Transparency = 0.6,
                 }):Play()
-
-                if Image then
-                    TweenService:Create(Image, Library.TweenInfo, {
-                        ImageTransparency = 0.5,
-                    }):Play()
-                end
-            end))
-
-            table.insert(Dropdown.Connections, Button.InputBegan:Connect(function(StartInput)
-                if not (Info.Multi and Dropdown.DragSelect and not Library.IsMobile) then
-                    return
-                end
-
-                local Entry = Row.Entry
-                if not Entry or Entry.IsDisabled then
-                    return
-                end
-
-                if not IsMouseInput(StartInput) then
-                    return
-                end
-
-                DragSelecting = true
-                DragStartIndex = Row.Index
-                table.clear(DragInitialValues)
-
-                for _, FilteredEntry in FilteredEntries do
-                    DragInitialValues[FilteredEntry.Value] = Dropdown.Value[FilteredEntry.Value]
-                end
-
-                UpdateDrag(Row.Index)
-
-                if DragInputEndedConn then DragInputEndedConn:Disconnect() end
-                if DragInputChangedConn then DragInputChangedConn:Disconnect() end
-
-                DragInputChangedConn = Library:GiveSignal(UserInputService.InputChanged:Connect(function(ChangeInput)
-                    if not IsMovementInput(ChangeInput) and ChangeInput ~= StartInput then
-                        return
-                    end
-
-                    local Pos = ChangeInput.Position
-                    for _, OtherRow in Pool do
-                        if OtherRow.Entry and Library:MouseIsOverFrame(OtherRow.Button, Pos) then
-                            UpdateDrag(OtherRow.Index)
-                            break
-                        end
-                    end
-                end))
-
-                DragInputEndedConn = Library:GiveSignal(UserInputService.InputEnded:Connect(function(EndInput)
-                    if EndInput ~= StartInput and not (IsMouseInput(EndInput) and EndInput.UserInputType == StartInput.UserInputType) then
-                        return
-                    end
-
-                    Dropdown:Display()
-                    Library:UpdateDependencyBoxes()
-                    Dropdown:RunChanged()
-
-                    StopDragSelect()
-                end))
-
-                table.insert(Dropdown.Connections, DragInputEndedConn)
-                table.insert(Dropdown.Connections, DragInputChangedConn)
             end))
 
             return Row
@@ -9170,22 +9520,60 @@ do
 
         function Dropdown:BuildDropdownList()
             StopDragSelect()
-
             RecomputeFilteredEntries()
 
-            MenuTable.Menu.CanvasPosition = Vector2.new(0, 0)
+            local Total = #FilteredEntries
+            local ItemHeight = 36
+            local Spacing = 6
 
-            Dropdown:RefreshPool()
-            Dropdown:RecalculateListSize(#FilteredEntries)
+            ModalList.CanvasPosition = Vector2.new(0, 0)
+            ModalList.CanvasSize = UDim2.fromOffset(0, Total * (ItemHeight + Spacing) + ListPaddingTop + 8)
+            EmptyLabel.Visible = Total == 0
+
+            for i = 1, Total do
+                local Entry = FilteredEntries[i]
+                local Row = RowCache[i]
+                if not Row then
+                    Row = CreateModalRow()
+                    RowCache[i] = Row
+                end
+
+                Row.Entry = Entry
+                Row.Index = i
+                Row.Container.Visible = true
+                Row.Container.Position = UDim2.new(0.5, 0, 0, (i - 1) * (ItemHeight + Spacing) + ListPaddingTop)
+                Row.TextLabel.Text = Entry.FormattedValue
+
+                if Entry.ValueImage then
+                    Row.Image.Visible = true
+                    Library:ApplyLucideIcon(Row.Image, Entry.ValueImage)
+                    Row.TextLabel.Position = UDim2.fromOffset(36, 0)
+                    Row.TextLabel.Size = UDim2.new(1, -72, 1, 0)
+                else
+                    Row.Image.Visible = false
+                    Row.TextLabel.Position = UDim2.fromOffset(14, 0)
+                    Row.TextLabel.Size = UDim2.new(1, -50, 1, 0)
+                end
+
+                Row:UpdateButton()
+            end
+
+            for i = Total + 1, #RowCache do
+                RowCache[i].Container.Visible = false
+                RowCache[i].Entry = nil
+            end
+
+            UpdateCustomScrollBar()
         end
 
-        for _ = 1, PoolSize do
-            table.insert(Pool, CreatePoolRow())
-        end
-
-        table.insert(Dropdown.Connections, MenuTable.Menu:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-            Dropdown:RefreshPool()
+        table.insert(Dropdown.Connections, ModalSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+            ClearSearchButton.Visible = ModalSearchInput.Text ~= ""
+            Dropdown:BuildDropdownList()
         end))
+
+        function Dropdown:RefreshPool()
+            Dropdown:BuildDropdownList()
+        end
 
         local function ValueExists(Val)
             if IsSequentialArray(Dropdown.Values) then
@@ -9227,8 +9615,10 @@ do
             end
 
             Dropdown:Display()
-            for _, Row in Pool do
-                Row:UpdateButton()
+            for _, Row in RowCache do
+                if Row.Container.Visible then
+                    Row:UpdateButton()
+                end
             end
 
             if not Dropdown.Disabled then
@@ -9347,7 +9737,7 @@ do
                 Dropdown.TooltipTable.Disabled = Dropdown.Disabled
             end
 
-            MenuTable:Close()
+            Dropdown:Close()
             DisplayButton.Active = not Dropdown.Disabled
             Dropdown:UpdateColors()
 
@@ -9356,6 +9746,10 @@ do
 
         function Dropdown:SetVisible(Visible: boolean)
             Dropdown.Visible = Visible
+
+            if not Visible and Dropdown.ActiveModal then
+                Dropdown:Close()
+            end
 
             Holder.Visible = Dropdown.Visible
             Groupbox:Resize()
@@ -9367,6 +9761,9 @@ do
 
             Label.Text = Text and Text or ""
             Label.Visible = not not Text
+            if HeaderTitle then
+                HeaderTitle.Text = Text or "Select Option"
+            end
         end
 
         function Dropdown:SetDragSelect(Value: boolean)
@@ -9383,7 +9780,7 @@ do
                 return
             end
 
-            MenuTable:Toggle()
+            Dropdown:Toggle()
         end
 
         table.insert(Dropdown.Connections, DisplayContainer.MouseButton1Click:Connect(ToggleDropdown))
@@ -9467,6 +9864,7 @@ do
         function Dropdown:Destroy()
             Dropdown.Destroyed = true
 
+            Dropdown:Close()
             StopDragSelect()
 
             if Dropdown.Connections then
@@ -9479,8 +9877,8 @@ do
                 Dropdown.TooltipTable:Destroy()
             end
 
-            if MenuTable then
-                MenuTable:Destroy()
+            if DropdownOverlay then
+                DropdownOverlay:Destroy()
             end
 
             if Holder then
@@ -11154,6 +11552,7 @@ function Library:CreateWindow(WindowInfo)
             Visible = false,
             Parent = ScreenGui,
         })
+        Library.MainFrame = MainFrame
         table.insert(
             Library.Corners,
             New("UICorner", {
@@ -15503,6 +15902,10 @@ function Library:Unload()
 
     if Library.ActiveLoading then
         Library.ActiveLoading:Destroy()
+    end
+
+    if Library.ActiveDropdownModal then
+        Library.ActiveDropdownModal:Close()
     end
 
     if ScreenGui then
