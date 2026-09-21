@@ -8841,15 +8841,21 @@ do
             }):Play()
         end))
 
+        local ScrollThickness = Library.IsMobile and 8 or 6
+        local ScrollGutter = ScrollThickness + 6
+
         local ModalList = New("ScrollingFrame", {
             BackgroundTransparency = 1,
             BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+            MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+            TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
             Position = UDim2.new(0, 12, 0, 90),
             ScrollBarImageColor3 = "OutlineColor",
-            ScrollBarThickness = 3,
-            Size = UDim2.new(1, -24, 1, -98),
-            TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+            ScrollBarImageTransparency = 0.1,
+            ScrollBarThickness = ScrollThickness,
+            Size = UDim2.new(1, -24, 1, -104),
+            VerticalScrollBarInset = Enum.ScrollBarInset.None,
             ZIndex = 2,
             Parent = ModalFrame,
         })
@@ -8990,7 +8996,7 @@ do
             local ItemCount = Count or #FilteredEntries
             local ItemHeight = 36
             local Spacing = 6
-            ModalList.CanvasSize = UDim2.fromOffset(0, ItemCount * (ItemHeight + Spacing) + 4)
+            ModalList.CanvasSize = UDim2.fromOffset(0, ItemCount * (ItemHeight + Spacing) + 12)
         end
 
         function Dropdown:UpdateColors()
@@ -9195,7 +9201,7 @@ do
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 0.6,
                 Position = UDim2.fromOffset(0, 0),
-                Size = UDim2.new(1, 0, 0, 36),
+                Size = UDim2.new(1, -ScrollGutter, 0, 36),
                 Text = "",
                 AutoButtonColor = false,
                 Visible = false,
@@ -9398,7 +9404,7 @@ do
             local Spacing = 6
 
             ModalList.CanvasPosition = Vector2.new(0, 0)
-            ModalList.CanvasSize = UDim2.fromOffset(0, Total * (ItemHeight + Spacing) + 4)
+            ModalList.CanvasSize = UDim2.fromOffset(0, Total * (ItemHeight + Spacing) + 12)
             EmptyLabel.Visible = Total == 0
 
             for i = 1, Total do
