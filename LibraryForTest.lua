@@ -174,7 +174,7 @@ local Library = {
     Floats = nil,
     Overlay = nil,
     ActiveDropdownModal = nil,
-    DropdownBlur = nil,
+    MainFrame = nil,
 
     Window = nil,
     WindowContainer = nil,
@@ -4150,6 +4150,13 @@ Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObje
             )
         then
             CurrentMenu:Close()
+        end
+
+        if Library.ActiveDropdownModal and Library.ActiveDropdownModal.ActiveModal then
+            local Modal = Library.ActiveDropdownModal.ModalFrame
+            if Modal and not Library:MouseIsOverFrame(Modal, Location) then
+                Library.ActiveDropdownModal:Close()
+            end
         end
     end
 end))
@@ -8383,42 +8390,12 @@ do
         return Slider
     end
 
-    local function SetDropdownBlur(Active: boolean)
-        local Success, Blur = pcall(function()
-            local Existing = Library.DropdownBlur
-            if (not Existing or not Existing.Parent) and Active then
-                Existing = Lighting:FindFirstChild("WislDropdownBlur")
-                if not Existing then
-                    Existing = Instance.new("BlurEffect")
-                    Existing.Name = "WislDropdownBlur"
-                    Existing.Size = 0
-                    Existing.Enabled = false
-                    Existing.Parent = Lighting
-                end
-                Library.DropdownBlur = Existing
-            end
-            return Library.DropdownBlur
-        end)
-
-        if Success and Blur then
-            if Active then
-                Blur.Enabled = true
-                TweenService:Create(Blur, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = 18,
-                }):Play()
-            else
-                local Tween = TweenService:Create(Blur, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                    Size = 0,
-                })
-                Tween:Play()
-                Tween.Completed:Once(function()
-                    if not Library.ActiveDropdownModal and Library.DropdownBlur then
-                        Library.DropdownBlur.Enabled = false
-                    end
-                end)
-            end
+    pcall(function()
+        local OldBlur = Lighting:FindFirstChild("WislDropdownBlur")
+        if OldBlur then
+            OldBlur:Destroy()
         end
-    end
+    end)
 
     function Funcs:AddDropdown(Idx, Info)
         if self.Destroyed then return nil end
@@ -8611,10 +8588,17 @@ do
             return ValueImage
         end
 
-        local HolderGui = Holder:FindFirstAncestorOfClass("ScreenGui")
-        local ParentGui = Overlay
-        if HolderGui and HolderGui ~= ScreenGui and Library.ActiveLoading and HolderGui == Library.ActiveLoading.ScreenGui then
-            ParentGui = HolderGui
+        local TargetWindow = Holder:FindFirstAncestor("Main")
+            or Library.MainFrame
+            or (Library.Window and Library.Window.MainFrame)
+
+        if not TargetWindow then
+            local HolderGui = Holder:FindFirstAncestorOfClass("ScreenGui")
+            if HolderGui and HolderGui ~= ScreenGui and Library.ActiveLoading and HolderGui == Library.ActiveLoading.ScreenGui then
+                TargetWindow = HolderGui
+            else
+                TargetWindow = Overlay
+            end
         end
 
         local DropdownOverlay = New("TextButton", {
@@ -8625,21 +8609,29 @@ do
             Size = UDim2.fromScale(1, 1),
             Text = "",
             Active = true,
-            ZIndex = 4000,
+            ZIndex = 8500,
             Visible = false,
-            Parent = ParentGui,
+            ClipsDescendants = true,
+            Parent = TargetWindow,
         })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = DropdownOverlay,
+            })
+        )
 
         local ModalFrame = New("TextButton", {
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(360, 380),
+            Size = UDim2.new(0.74, 0, 0.8, 0),
             Text = "",
             AutoButtonColor = false,
             Active = true,
             ClipsDescendants = true,
-            ZIndex = 1,
+            ZIndex = 8501,
             Parent = DropdownOverlay,
         })
         table.insert(
@@ -8658,10 +8650,12 @@ do
         table.insert(Library.Scales, ModalScale)
 
         New("UISizeConstraint", {
-            MinSize = Vector2.new(280, 240),
-            MaxSize = Vector2.new(500, 520),
+            MinSize = Vector2.new(240, 220),
+            MaxSize = Vector2.new(440, 440),
             Parent = ModalFrame,
         })
+
+        Dropdown.ModalFrame = ModalFrame
 
         local ModalHeader = New("Frame", {
             BackgroundTransparency = 1,
@@ -8843,6 +8837,8 @@ do
 
         local ScrollThickness = Library.IsMobile and 8 or 6
         local ScrollGutter = ScrollThickness + 6
+        local RowPaddingLeft = 4
+        local RowPaddingRight = ScrollGutter + 4
 
         local ModalList = New("ScrollingFrame", {
             BackgroundTransparency = 1,
@@ -8850,11 +8846,11 @@ do
             MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
-            Position = UDim2.new(0, 12, 0, 90),
+            Position = UDim2.new(0, 8, 0, 90),
             ScrollBarImageColor3 = "OutlineColor",
             ScrollBarImageTransparency = 0.1,
             ScrollBarThickness = ScrollThickness,
-            Size = UDim2.new(1, -24, 1, -104),
+            Size = UDim2.new(1, -16, 1, -104),
             VerticalScrollBarInset = Enum.ScrollBarInset.None,
             ZIndex = 2,
             Parent = ModalFrame,
@@ -8896,11 +8892,10 @@ do
             end
 
             pcall(function()
-                local Cam = workspace.CurrentCamera
-                if Cam and Cam.ViewportSize then
-                    local VW, VH = Cam.ViewportSize.X, Cam.ViewportSize.Y
-                    local TargetW = math.clamp(math.floor(VW * 0.72), 280, 440)
-                    local TargetH = math.clamp(math.floor(VH * 0.72), 260, 480)
+                local WSize = TargetWindow.AbsoluteSize
+                if WSize and WSize.X > 0 and WSize.Y > 0 then
+                    local TargetW = math.clamp(math.floor(WSize.X * 0.74), 240, 420)
+                    local TargetH = math.clamp(math.floor(WSize.Y * 0.80), 220, 420)
                     ModalFrame.Size = UDim2.fromOffset(TargetW, TargetH)
                 end
             end)
@@ -8911,14 +8906,12 @@ do
             ModalScale.Scale = 0.92
 
             TweenService:Create(DropdownOverlay, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                BackgroundTransparency = 0.45,
+                BackgroundTransparency = 0.38,
             }):Play()
 
             TweenService:Create(ModalScale, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                 Scale = 1,
             }):Play()
-
-            SetDropdownBlur(true)
 
             ArrowImage.Rotation = 180
             ArrowImage.ImageTransparency = 0
@@ -8943,8 +8936,6 @@ do
             ArrowImage.Rotation = 0
             ArrowImage.ImageTransparency = 0.5
             DisplayStroke.Color = Library.Scheme.OutlineColor
-
-            SetDropdownBlur(false)
 
             local OverlayTween = TweenService:Create(DropdownOverlay, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                 BackgroundTransparency = 1,
@@ -9200,8 +9191,8 @@ do
             local ItemBtn = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 0.6,
-                Position = UDim2.fromOffset(0, 0),
-                Size = UDim2.new(1, -ScrollGutter, 0, 36),
+                Position = UDim2.fromOffset(RowPaddingLeft, 0),
+                Size = UDim2.new(1, -(RowPaddingLeft + RowPaddingRight), 0, 36),
                 Text = "",
                 AutoButtonColor = false,
                 Visible = false,
@@ -9418,7 +9409,7 @@ do
                 Row.Entry = Entry
                 Row.Index = i
                 Row.Container.Visible = true
-                Row.Container.Position = UDim2.fromOffset(0, (i - 1) * (ItemHeight + Spacing))
+                Row.Container.Position = UDim2.fromOffset(RowPaddingLeft, (i - 1) * (ItemHeight + Spacing))
                 Row.TextLabel.Text = Entry.FormattedValue
 
                 if Entry.ValueImage then
@@ -11427,6 +11418,7 @@ function Library:CreateWindow(WindowInfo)
             Visible = false,
             Parent = ScreenGui,
         })
+        Library.MainFrame = MainFrame
         table.insert(
             Library.Corners,
             New("UICorner", {
@@ -15780,13 +15772,6 @@ function Library:Unload()
 
     if Library.ActiveDropdownModal then
         Library.ActiveDropdownModal:Close()
-    end
-
-    if Library.DropdownBlur then
-        pcall(function()
-            Library.DropdownBlur:Destroy()
-        end)
-        Library.DropdownBlur = nil
     end
 
     if ScreenGui then
