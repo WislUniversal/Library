@@ -8761,8 +8761,8 @@ do
 
         local ModalSearchContainer = New("Frame", {
             BackgroundColor3 = "MainColor",
-            Position = UDim2.new(0, 12, 0, 50),
-            Size = UDim2.new(1, -24, 0, 32),
+            Position = UDim2.new(0, 14, 0, 52),
+            Size = UDim2.new(1, -28, 0, 32),
             ZIndex = 2,
             Parent = ModalFrame,
         })
@@ -8835,26 +8835,155 @@ do
             }):Play()
         end))
 
-        local ScrollThickness = Library.IsMobile and 8 or 6
-        local ScrollGutter = ScrollThickness + 6
-        local RowPaddingLeft = 4
-        local RowPaddingRight = ScrollGutter + 4
+        local ScrollThickness = Library.IsMobile and 6 or 4
 
         local ModalList = New("ScrollingFrame", {
             BackgroundTransparency = 1,
-            BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
-            MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
-            TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
-            Position = UDim2.new(0, 8, 0, 90),
-            ScrollBarImageColor3 = "OutlineColor",
-            ScrollBarImageTransparency = 0.1,
-            ScrollBarThickness = ScrollThickness,
-            Size = UDim2.new(1, -16, 1, -104),
+            Position = UDim2.new(0, 0, 0, 98),
+            ScrollBarThickness = 0,
+            Size = UDim2.new(1, 0, 1, -112),
             VerticalScrollBarInset = Enum.ScrollBarInset.None,
             ZIndex = 2,
             Parent = ModalFrame,
         })
+
+        local ScrollTrack = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundColor3 = "MainColor",
+            BackgroundTransparency = 0.7,
+            Position = UDim2.new(1, -4, 0, 98),
+            Size = UDim2.new(0, ScrollThickness, 1, -112),
+            Visible = false,
+            ZIndex = 3,
+            Parent = ModalFrame,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ScrollTrack,
+        })
+
+        local ScrollThumb = New("TextButton", {
+            AutoButtonColor = false,
+            BackgroundColor3 = "OutlineColor",
+            BackgroundTransparency = 0.2,
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(1, 0, 0, 30),
+            Text = "",
+            ZIndex = 4,
+            Parent = ScrollTrack,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ScrollThumb,
+        })
+
+        local function UpdateCustomScrollBar()
+            local WindowHeight = ModalList.AbsoluteWindowSize.Y
+            local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+            local TrackHeight = ScrollTrack.AbsoluteSize.Y
+
+            if CanvasHeight <= WindowHeight or TrackHeight <= 0 then
+                ScrollTrack.Visible = false
+                return
+            end
+
+            ScrollTrack.Visible = true
+            local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+            local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+            local MaxScroll = CanvasHeight - WindowHeight
+            local ScrollProgress = if MaxScroll > 0 then math.clamp(ModalList.CanvasPosition.Y / MaxScroll, 0, 1) else 0
+            local ThumbPos = math.floor(ScrollProgress * (TrackHeight - ThumbHeight))
+
+            ScrollThumb.Size = UDim2.new(1, 0, 0, ThumbHeight)
+            ScrollThumb.Position = UDim2.new(0, 0, 0, ThumbPos)
+        end
+
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("CanvasPosition"):Connect(UpdateCustomScrollBar))
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(UpdateCustomScrollBar))
+        table.insert(Dropdown.Connections, ModalList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(UpdateCustomScrollBar))
+
+        local DraggingThumb = false
+        local DragStartY = 0
+        local DragStartCanvasY = 0
+
+        table.insert(Dropdown.Connections, ScrollThumb.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                DraggingThumb = true
+                DragStartY = Input.Position.Y
+                DragStartCanvasY = ModalList.CanvasPosition.Y
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.AccentColor,
+                    BackgroundTransparency = 0,
+                }):Play()
+            end
+        end))
+
+        table.insert(Dropdown.Connections, ScrollTrack.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                local RelativeY = Input.Position.Y - ScrollTrack.AbsolutePosition.Y
+                local TrackHeight = ScrollTrack.AbsoluteSize.Y
+                local WindowHeight = ModalList.AbsoluteWindowSize.Y
+                local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+                local MaxScroll = CanvasHeight - WindowHeight
+                if MaxScroll > 0 and TrackHeight > 0 then
+                    local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+                    local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+                    local ScrollableTrack = TrackHeight - ThumbHeight
+                    if ScrollableTrack > 0 then
+                        local Progress = math.clamp((RelativeY - ThumbHeight / 2) / ScrollableTrack, 0, 1)
+                        ModalList.CanvasPosition = Vector2.new(0, Progress * MaxScroll)
+                    end
+                end
+            end
+        end))
+
+        table.insert(Dropdown.Connections, UserInputService.InputChanged:Connect(function(Input)
+            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+                local DeltaY = Input.Position.Y - DragStartY
+                local TrackHeight = ScrollTrack.AbsoluteSize.Y
+                local WindowHeight = ModalList.AbsoluteWindowSize.Y
+                local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+                local MaxScroll = CanvasHeight - WindowHeight
+                if MaxScroll > 0 and TrackHeight > 0 then
+                    local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+                    local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+                    local ScrollableTrack = TrackHeight - ThumbHeight
+                    if ScrollableTrack > 0 then
+                        local ScrollDelta = (DeltaY / ScrollableTrack) * MaxScroll
+                        ModalList.CanvasPosition = Vector2.new(0, math.clamp(DragStartCanvasY + ScrollDelta, 0, MaxScroll))
+                    end
+                end
+            end
+        end))
+
+        local function StopThumbDrag(Input)
+            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                DraggingThumb = false
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.OutlineColor,
+                    BackgroundTransparency = 0.2,
+                }):Play()
+            end
+        end
+
+        table.insert(Dropdown.Connections, UserInputService.InputEnded:Connect(StopThumbDrag))
+
+        table.insert(Dropdown.Connections, ScrollThumb.MouseEnter:Connect(function()
+            if not DraggingThumb then
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundTransparency = 0.05,
+                }):Play()
+            end
+        end))
+
+        table.insert(Dropdown.Connections, ScrollThumb.MouseLeave:Connect(function()
+            if not DraggingThumb then
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundTransparency = 0.2,
+                }):Play()
+            end
+        end))
 
         local EmptyLabel = New("TextLabel", {
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -8925,6 +9054,7 @@ do
                 return
             end
 
+            DraggingThumb = false
             Dropdown.ActiveModal = false
             if Dropdown.Menu then
                 Dropdown.Menu.Active = false
@@ -9189,10 +9319,11 @@ do
             }
 
             local ItemBtn = New("TextButton", {
+                AnchorPoint = Vector2.new(0.5, 0),
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 0.6,
-                Position = UDim2.fromOffset(RowPaddingLeft, 0),
-                Size = UDim2.new(1, -(RowPaddingLeft + RowPaddingRight), 0, 36),
+                Position = UDim2.new(0.5, 0, 0, 0),
+                Size = UDim2.new(1, -28, 0, 36),
                 Text = "",
                 AutoButtonColor = false,
                 Visible = false,
@@ -9409,7 +9540,7 @@ do
                 Row.Entry = Entry
                 Row.Index = i
                 Row.Container.Visible = true
-                Row.Container.Position = UDim2.fromOffset(RowPaddingLeft, (i - 1) * (ItemHeight + Spacing))
+                Row.Container.Position = UDim2.new(0.5, 0, 0, (i - 1) * (ItemHeight + Spacing))
                 Row.TextLabel.Text = Entry.FormattedValue
 
                 if Entry.ValueImage then
@@ -9430,6 +9561,8 @@ do
                 RowCache[i].Container.Visible = false
                 RowCache[i].Entry = nil
             end
+
+            UpdateCustomScrollBar()
         end
 
         table.insert(Dropdown.Connections, ModalSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
