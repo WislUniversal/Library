@@ -8761,7 +8761,7 @@ do
 
         local ModalSearchContainer = New("Frame", {
             BackgroundColor3 = "MainColor",
-            Position = UDim2.new(0, 14, 0, 52),
+            Position = UDim2.new(0, 14, 0, 50),
             Size = UDim2.new(1, -28, 0, 32),
             ZIndex = 2,
             Parent = ModalFrame,
@@ -8836,13 +8836,14 @@ do
         end))
 
         local ScrollThickness = Library.IsMobile and 6 or 4
+        local ListPaddingTop = 8
 
         local ModalList = New("ScrollingFrame", {
             BackgroundTransparency = 1,
             CanvasSize = UDim2.fromOffset(0, 0),
-            Position = UDim2.new(0, 0, 0, 98),
+            Position = UDim2.new(0, 0, 0, 90),
             ScrollBarThickness = 0,
-            Size = UDim2.new(1, 0, 1, -112),
+            Size = UDim2.new(1, 0, 1, -104),
             VerticalScrollBarInset = Enum.ScrollBarInset.None,
             ZIndex = 2,
             Parent = ModalFrame,
@@ -9322,7 +9323,7 @@ do
                 AnchorPoint = Vector2.new(0.5, 0),
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 0.6,
-                Position = UDim2.new(0.5, 0, 0, 0),
+                Position = UDim2.new(0.5, 0, 0, ListPaddingTop),
                 Size = UDim2.new(1, -28, 0, 36),
                 Text = "",
                 AutoButtonColor = false,
@@ -9526,7 +9527,7 @@ do
             local Spacing = 6
 
             ModalList.CanvasPosition = Vector2.new(0, 0)
-            ModalList.CanvasSize = UDim2.fromOffset(0, Total * (ItemHeight + Spacing) + 12)
+            ModalList.CanvasSize = UDim2.fromOffset(0, Total * (ItemHeight + Spacing) + ListPaddingTop + 8)
             EmptyLabel.Visible = Total == 0
 
             for i = 1, Total do
@@ -9540,7 +9541,7 @@ do
                 Row.Entry = Entry
                 Row.Index = i
                 Row.Container.Visible = true
-                Row.Container.Position = UDim2.new(0.5, 0, 0, (i - 1) * (ItemHeight + Spacing))
+                Row.Container.Position = UDim2.new(0.5, 0, 0, (i - 1) * (ItemHeight + Spacing) + ListPaddingTop)
                 Row.TextLabel.Text = Entry.FormattedValue
 
                 if Entry.ValueImage then
