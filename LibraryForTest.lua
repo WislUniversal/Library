@@ -11817,6 +11817,15 @@ function Library:CreateWindow(WindowInfo)
         end
     end
 
+    function Window:SetMobileButtonsVisible(Visible: boolean)
+        if Window.MobileToggleButton and Window.MobileToggleButton.Button then
+            Window.MobileToggleButton.Button.Visible = Visible
+        end
+        if Window.MobileLockButton and Window.MobileLockButton.Button then
+            Window.MobileLockButton.Button.Visible = Visible
+        end
+    end
+
     function Window:SetCornerRadius(Radius: number)
         assert(typeof(Radius) == "number", "Expected number for Radius got: " .. typeof(Radius))
         Radius = math.min(Radius, 28)
@@ -14670,6 +14679,11 @@ function Library:CreateWindow(WindowInfo)
                 LockButton.Button.Visible = false
             end
         end
+
+        Window.MobileToggleButton = ToggleButton
+        Window.MobileLockButton = LockButton
+        Library.MobileToggleButton = ToggleButton
+        Library.MobileLockButton = LockButton
     end
 
     --// Execution \\--
@@ -15530,6 +15544,8 @@ function Library:Unload()
     Library.WindowContainer = nil
     Library.KeybindFrame = nil
     Library.KeybindContainer = nil
+    Library.MobileToggleButton = nil
+    Library.MobileLockButton = nil
 
     getgenv().Library = nil
 end
