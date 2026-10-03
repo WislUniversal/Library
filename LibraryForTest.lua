@@ -274,7 +274,7 @@ local Library = {
     OriginalMinSize = Vector2.new(480, 360),
     MinSize = Vector2.new(480, 360),
     DPIScale = 1,
-    CornerRadius = 12,
+    CornerRadius = 6,
 
     --// Scheme \\--
     IsLightTheme = false,
@@ -380,8 +380,8 @@ local Templates = {
         Footer = "",
 
         Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.fromOffset(930, 730),
-        IconSize = UDim2.fromOffset(40, 40),
+        Size = UDim2.fromOffset(720, 520),
+        IconSize = UDim2.fromOffset(26, 26),
 
         AutoShow = true,
         Center = true,
@@ -397,7 +397,7 @@ local Templates = {
         SearchbarSize = UDim2.fromScale(1, 1),
         GlobalSearch = false,
 
-        CornerRadius = 12,
+        CornerRadius = 6,
         NotifySide = "Right",
         ShowCustomCursor = true,
 
@@ -422,6 +422,7 @@ local Templates = {
         EnableCompacting = true,
         DisableCompactingSnap = false,
         SidebarCompacted = false,
+        SidebarWidth = nil,
         MinContainerWidth = 256,
 
         --// Snapping \\--
@@ -433,7 +434,10 @@ local Templates = {
         CompactWidthActivation = 128,
 
         --// Background \\--
-        BackgroundImage = "",
+        BackgroundImage = "rbxassetid://6071575925",
+        BackgroundGrid = true,
+        GridTileSize = 24,
+        GridTransparency = 0.94,
 
         --// Animations \\--
         Animations = {
@@ -448,14 +452,14 @@ local Templates = {
         TabSwipeOffset = 26,
         TabSwipeFrom = "bottom",
         TabButtonsStyle = {
-            Gap = 6,
+            Gap = 4,
             Padding = 6,
-            CornerRadius = 8,
-            Height = 42,
-            Indicator = false,
+            CornerRadius = 4,
+            Height = 36,
+            Indicator = true,
             IndicatorWidth = 3,
-            IndicatorHeight = 20,
-            AutoDistribute = true,
+            IndicatorHeight = 18,
+            AutoDistribute = false,
         },
     },
     Groupbox = {
@@ -8705,7 +8709,7 @@ do
             Parent = ModalHeader,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 6),
+            CornerRadius = UDim.new(0, 4),
             Parent = CloseButton,
         })
         New("UIStroke", {
@@ -8767,7 +8771,7 @@ do
             Parent = ModalFrame,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 6),
+            CornerRadius = UDim.new(0, 4),
             Parent = ModalSearchContainer,
         })
         local SearchStroke = New("UIStroke", {
@@ -9333,7 +9337,7 @@ do
             })
 
             local ItemCorner = New("UICorner", {
-                CornerRadius = UDim.new(0, 6),
+                CornerRadius = UDim.new(0, 4),
                 Parent = ItemBtn,
             })
 
@@ -11530,7 +11534,7 @@ function Library:CreateWindow(WindowInfo)
         AvoidCoreGui = WindowInfo.SnapAvoidCoreGui,
     }
 
-    local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
+    local InitialLeftWidth = WindowInfo.SidebarWidth or math.clamp(math.ceil(WindowInfo.Size.X.Offset * 0.23), 150, 185)
     local IsCompact = WindowInfo.SidebarCompacted
     local LastExpandedWidth = InitialLeftWidth
 
@@ -11581,16 +11585,21 @@ function Library:CreateWindow(WindowInfo)
             ZIndex = 2
         })
 
+        local IsGridBackground = WindowInfo.BackgroundGrid ~= false and (WindowInfo.BackgroundImage == "rbxassetid://6071575925" or WindowInfo.BackgroundGrid == true)
+        local GridTile = WindowInfo.GridTileSize or 24
+        local BgTransparency = if IsGridBackground then (WindowInfo.GridTransparency or 0.94) else 0.75
         local BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
         HasBackgroundImage = BackgroundIcon ~= nil
         BackgroundImage = New("ImageLabel", {
             Active = false,
             Position = UDim2.fromScale(0, 0),
             Size = UDim2.fromScale(1, 1),
-            ScaleType = Enum.ScaleType.Stretch,
+            ScaleType = IsGridBackground and Enum.ScaleType.Tile or Enum.ScaleType.Stretch,
+            TileSize = IsGridBackground and UDim2.fromOffset(GridTile, GridTile) or UDim2.fromScale(1, 1),
             ZIndex = 1,
             BackgroundTransparency = 1,
-            ImageTransparency = 0.75,
+            ImageTransparency = BgTransparency,
+            ImageColor3 = if IsGridBackground then "OutlineColor" else nil,
             Visible = HasBackgroundImage,
             Parent = MainFrame,
         })
@@ -11791,7 +11800,7 @@ function Library:CreateWindow(WindowInfo)
         table.insert(
             Library.Corners,
             New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius / 2),
                 Parent = SearchBox,
             })
         )
@@ -11850,7 +11859,7 @@ function Library:CreateWindow(WindowInfo)
             Parent = ExecutorBadge,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 8),
+            CornerRadius = UDim.new(0, 4),
             Parent = ExecutorBadge,
         })
         New("UIStroke", {
@@ -12366,13 +12375,16 @@ function Library:CreateWindow(WindowInfo)
                 TabEntry.Label.Visible = not IsCompact
             end
             if TabEntry.Padding then
-                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
-                TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
-                TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
-                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
+                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 8)
+                TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 10)
+                TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 10)
+                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 8)
             end
             if TabEntry.Icon then
                 TabEntry.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+            end
+            if TabEntry.IsSection and TabEntry.Line then
+                TabEntry.Line.Visible = not IsCompact
             end
         end
     end
@@ -12434,6 +12446,73 @@ function Library:CreateWindow(WindowInfo)
         end
     end
 
+    function Window:AddSection(...)
+        local Title = nil
+        local Order = nil
+        if select("#", ...) == 1 and typeof(...) == "table" then
+            local Info = select(1, ...)
+            Title = Info.Title or Info.Name or "Section"
+            Order = Info.Order
+        else
+            Title = select(1, ...)
+            Order = select(2, ...)
+        end
+
+        if not tonumber(Order) then
+            Order = #Tabs:GetChildren()
+        end
+
+        local SectionHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            LayoutOrder = Order,
+            Parent = Tabs,
+        })
+
+        local SectionLabel = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(IsCompact and 4 or 8, 4),
+            Size = UDim2.new(1, -(IsCompact and 8 or 16), 1, -8),
+            Text = string.upper(tostring(Title or "Section")),
+            TextSize = 11,
+            Font = WindowInfo.Font or Enum.Font.FredokaOne,
+            TextColor3 = "FontColor",
+            TextTransparency = 0.55,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Visible = not IsCompact,
+            Parent = SectionHolder,
+        })
+
+        local SectionLine = New("Frame", {
+            BackgroundColor3 = "OutlineColor",
+            BackgroundTransparency = 0.6,
+            BorderSizePixel = 0,
+            Position = UDim2.new(0, IsCompact and 4 or 8, 1, -1),
+            Size = UDim2.new(1, -(IsCompact and 8 or 16), 0, 1),
+            Visible = not IsCompact,
+            Parent = SectionHolder,
+        })
+
+        table.insert(Library.TabButtons, {
+            Frame = SectionHolder,
+            Label = SectionLabel,
+            Line = SectionLine,
+            IsSection = true,
+        })
+
+        local SectionObject = {}
+        function SectionObject:SetText(NewTitle: string)
+            SectionLabel.Text = string.upper(tostring(NewTitle))
+        end
+        function SectionObject:SetVisible(Visible: boolean)
+            SectionHolder.Visible = Visible
+        end
+
+        return SectionObject
+    end
+
+    Window.AddTabSection = Window.AddSection
+
     function Window:AddTab(...)
         local Name = nil
         local Icon = nil
@@ -12443,7 +12522,7 @@ function Library:CreateWindow(WindowInfo)
 
         if select("#", ...) == 1 and typeof(...) == "table" then
             local Info = select(1, ...)
-            Name = Info.Name or "Tab"
+            Name = Info.Name or Info.Title or "Tab"
             Icon = Info.Icon
             Description = Info.Description
             Tooltip = Info.Tooltip
@@ -12505,18 +12584,19 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
-                PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
-                PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 8),
+                PaddingLeft = UDim.new(0, IsCompact and 6 or 10),
+                PaddingRight = UDim.new(0, IsCompact and 6 or 10),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 8),
                 Parent = ButtonHolder,
             })
+            local LabelOffset = if Icon then 28 else 4
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
-                Size = UDim2.new(1, -30, 1, 0),
+                Position = UDim2.fromOffset(LabelOffset, 0),
+                Size = UDim2.new(1, -LabelOffset, 1, 0),
                 Text = Name,
-                TextSize = 15,
+                TextSize = 14,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
@@ -13672,6 +13752,16 @@ function Library:CreateWindow(WindowInfo)
             return Tab:AddGroupbox({ Side = 2, Name = Name, IconName = IconName, Visible = Visible, Collapsed = Collapsed, DisableCollapsing = DisableCollapsing })
         end
 
+        function Tab:AddSection(...)
+            if select("#", ...) == 1 and typeof(...) == "table" then
+                return Tab:AddGroupbox(...)
+            end
+            local Name = select(1, ...)
+            local Side = select(2, ...) or 1
+            local IconName = select(3, ...)
+            return Tab:AddGroupbox({ Side = Side, Name = Name, IconName = IconName })
+        end
+
         function Tab:Hover(Hovering)
             if Library.ActiveTab == Tab then
                 return
@@ -13964,19 +14054,20 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
-                PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
-                PaddingRight = UDim.new(0, IsCompact and 6 or 12),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 8),
+                PaddingLeft = UDim.new(0, IsCompact and 6 or 10),
+                PaddingRight = UDim.new(0, IsCompact and 6 or 10),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 8),
                 Parent = ButtonHolder,
             })
 
+            local LabelOffset = if Icon then 28 else 4
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(30, 0),
-                Size = UDim2.new(1, -30, 1, 0),
+                Position = UDim2.fromOffset(LabelOffset, 0),
+                Size = UDim2.new(1, -LabelOffset, 1, 0),
                 Text = Name,
-                TextSize = 15,
+                TextSize = 14,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
@@ -14655,7 +14746,7 @@ function Library:CreateWindow(WindowInfo)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                     Parent = TextBtn
                 })
             )
@@ -14701,7 +14792,7 @@ function Library:CreateWindow(WindowInfo)
                 table.insert(
                     Library.Corners,
                     New("UICorner", {
-                        CornerRadius = UDim.new(0, Library.CornerRadius),
+                        CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                         Parent = ProgressBar
                     })
                 )
@@ -15747,7 +15838,7 @@ function Library:CreateLoading(LoadingInfo)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                     Parent = TextBtn
                 })
             )
