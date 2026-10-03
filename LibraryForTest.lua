@@ -274,7 +274,7 @@ local Library = {
     OriginalMinSize = Vector2.new(480, 360),
     MinSize = Vector2.new(480, 360),
     DPIScale = 1,
-    CornerRadius = 12,
+    CornerRadius = 8,
 
     --// Scheme \\--
     IsLightTheme = false,
@@ -397,7 +397,7 @@ local Templates = {
         SearchbarSize = UDim2.fromScale(1, 1),
         GlobalSearch = false,
 
-        CornerRadius = 12,
+        CornerRadius = 8,
         NotifySide = "Right",
         ShowCustomCursor = true,
 
@@ -450,7 +450,7 @@ local Templates = {
         TabButtonsStyle = {
             Gap = 6,
             Padding = 6,
-            CornerRadius = 8,
+            CornerRadius = 6,
             Height = 42,
             Indicator = false,
             IndicatorWidth = 3,
@@ -8705,7 +8705,7 @@ do
             Parent = ModalHeader,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 6),
+            CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = CloseButton,
         })
         New("UIStroke", {
@@ -8767,7 +8767,7 @@ do
             Parent = ModalFrame,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 6),
+            CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = ModalSearchContainer,
         })
         local SearchStroke = New("UIStroke", {
@@ -9333,7 +9333,7 @@ do
             })
 
             local ItemCorner = New("UICorner", {
-                CornerRadius = UDim.new(0, 6),
+                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                 Parent = ItemBtn,
             })
 
@@ -11791,7 +11791,7 @@ function Library:CreateWindow(WindowInfo)
         table.insert(
             Library.Corners,
             New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                 Parent = SearchBox,
             })
         )
@@ -11850,7 +11850,7 @@ function Library:CreateWindow(WindowInfo)
             Parent = ExecutorBadge,
         })
         New("UICorner", {
-            CornerRadius = UDim.new(0, 8),
+            CornerRadius = UDim.new(0, Library.CornerRadius / 2),
             Parent = ExecutorBadge,
         })
         New("UIStroke", {
@@ -14655,7 +14655,7 @@ function Library:CreateWindow(WindowInfo)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                     Parent = TextBtn
                 })
             )
@@ -14701,7 +14701,7 @@ function Library:CreateWindow(WindowInfo)
                 table.insert(
                     Library.Corners,
                     New("UICorner", {
-                        CornerRadius = UDim.new(0, Library.CornerRadius),
+                        CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                         Parent = ProgressBar
                     })
                 )
@@ -15747,7 +15747,7 @@ function Library:CreateLoading(LoadingInfo)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
+                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
                     Parent = TextBtn
                 })
             )
