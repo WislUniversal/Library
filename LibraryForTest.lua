@@ -380,8 +380,8 @@ local Templates = {
         Footer = "",
 
         Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.fromOffset(720, 520),
-        IconSize = UDim2.fromOffset(26, 26),
+        Size = UDim2.fromOffset(820, 600),
+        IconSize = UDim2.fromOffset(32, 32),
 
         AutoShow = true,
         Center = true,
@@ -434,10 +434,10 @@ local Templates = {
         CompactWidthActivation = 128,
 
         --// Background \\--
-        BackgroundImage = "rbxassetid://6071575925",
+        BackgroundImage = "",
         BackgroundGrid = true,
         GridTileSize = 24,
-        GridTransparency = 0.94,
+        GridTransparency = 0.92,
 
         --// Animations \\--
         Animations = {
@@ -452,13 +452,13 @@ local Templates = {
         TabSwipeOffset = 26,
         TabSwipeFrom = "bottom",
         TabButtonsStyle = {
-            Gap = 4,
+            Gap = 6,
             Padding = 6,
             CornerRadius = 4,
-            Height = 36,
+            Height = 42,
             Indicator = true,
             IndicatorWidth = 3,
-            IndicatorHeight = 18,
+            IndicatorHeight = 20,
             AutoDistribute = false,
         },
     },
@@ -2527,19 +2527,11 @@ end
 function Library:AddOutline(Frame: GuiObject)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
-        Thickness = 1.2,
+        Thickness = 1,
         LineJoinMode = Enum.LineJoinMode.Round,
-        ZIndex = 2,
         Parent = Frame,
     })
-    local ShadowStroke = New("UIStroke", {
-        Color = "DarkColor",
-        Thickness = 1.8,
-        LineJoinMode = Enum.LineJoinMode.Round,
-        ZIndex = 1,
-        Parent = Frame,
-    })
-    return OutlineStroke, ShadowStroke
+    return OutlineStroke, OutlineStroke
 end
 
 function Library:AddBlank(Frame: GuiObject, Size: UDim2)
@@ -11534,7 +11526,7 @@ function Library:CreateWindow(WindowInfo)
         AvoidCoreGui = WindowInfo.SnapAvoidCoreGui,
     }
 
-    local InitialLeftWidth = WindowInfo.SidebarWidth or math.clamp(math.ceil(WindowInfo.Size.X.Offset * 0.23), 150, 185)
+    local InitialLeftWidth = WindowInfo.SidebarWidth or math.clamp(math.ceil(WindowInfo.Size.X.Offset * 0.24), 185, 210)
     local IsCompact = WindowInfo.SidebarCompacted
     local LastExpandedWidth = InitialLeftWidth
 
@@ -11580,26 +11572,21 @@ function Library:CreateWindow(WindowInfo)
         DividerLine = New("Frame", {
             BackgroundColor3 = "OutlineColor",
             Position = UDim2.fromOffset(InitialLeftWidth, 0),
-            Size = UDim2.new(0, 1, 1, 0),
+            Size = UDim2.new(0, 1, 1, -1),
             Parent = MainFrame,
             ZIndex = 2
         })
 
-        local IsGridBackground = WindowInfo.BackgroundGrid ~= false and (WindowInfo.BackgroundImage == "rbxassetid://6071575925" or WindowInfo.BackgroundGrid == true)
-        local GridTile = WindowInfo.GridTileSize or 24
-        local BgTransparency = if IsGridBackground then (WindowInfo.GridTransparency or 0.94) else 0.75
         local BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
         HasBackgroundImage = BackgroundIcon ~= nil
         BackgroundImage = New("ImageLabel", {
             Active = false,
             Position = UDim2.fromScale(0, 0),
             Size = UDim2.fromScale(1, 1),
-            ScaleType = IsGridBackground and Enum.ScaleType.Tile or Enum.ScaleType.Stretch,
-            TileSize = IsGridBackground and UDim2.fromOffset(GridTile, GridTile) or UDim2.fromScale(1, 1),
+            ScaleType = Enum.ScaleType.Stretch,
             ZIndex = 1,
             BackgroundTransparency = 1,
-            ImageTransparency = BgTransparency,
-            ImageColor3 = if IsGridBackground then "OutlineColor" else nil,
+            ImageTransparency = 0.75,
             Visible = HasBackgroundImage,
             Parent = MainFrame,
         })
@@ -11614,6 +11601,31 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BackgroundImage,
             })
         )
+
+        if WindowInfo.BackgroundGrid then
+            local GridTile = WindowInfo.GridTileSize or 24
+            local GridTransparency = WindowInfo.GridTransparency or 0.92
+            local GridPattern = New("ImageLabel", {
+                Active = false,
+                BackgroundTransparency = 1,
+                Image = "rbxassetid://9968344105",
+                ImageColor3 = "OutlineColor",
+                ImageTransparency = GridTransparency,
+                ScaleType = Enum.ScaleType.Tile,
+                TileSize = UDim2.fromOffset(GridTile, GridTile),
+                Position = UDim2.fromScale(0, 0),
+                Size = UDim2.fromScale(1, 1),
+                ZIndex = 1,
+                Parent = MainFrame,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = GridPattern,
+                })
+            )
+        end
 
         if WindowInfo.Center then
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
@@ -12375,10 +12387,10 @@ function Library:CreateWindow(WindowInfo)
                 TabEntry.Label.Visible = not IsCompact
             end
             if TabEntry.Padding then
-                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 8)
-                TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 10)
-                TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 10)
-                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 8)
+                TabEntry.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
+                TabEntry.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
+                TabEntry.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
+                TabEntry.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
             end
             if TabEntry.Icon then
                 TabEntry.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
@@ -12411,7 +12423,7 @@ function Library:CreateWindow(WindowInfo)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
         DividerLine.Position = UDim2.fromOffset(Width, 0)
-        DividerLine.Size = UDim2.new(0, 1, 1, 0)
+        DividerLine.Size = UDim2.new(0, 1, 1, -1)
 
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
@@ -12584,19 +12596,19 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 8),
-                PaddingLeft = UDim.new(0, IsCompact and 6 or 10),
-                PaddingRight = UDim.new(0, IsCompact and 6 or 10),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 8),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
+                PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
+                PaddingRight = UDim.new(0, IsCompact and 6 or 12),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
                 Parent = ButtonHolder,
             })
-            local LabelOffset = if Icon then 28 else 4
+            local LabelOffset = if Icon then 30 else 4
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.fromOffset(LabelOffset, 0),
                 Size = UDim2.new(1, -LabelOffset, 1, 0),
                 Text = Name,
-                TextSize = 14,
+                TextSize = 15,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
@@ -13027,7 +13039,7 @@ function Library:CreateWindow(WindowInfo)
                     BottomRightRadius = UDim.new(0, 0),
                     BottomLeftRadius = UDim.new(0, 0),
                     Parent = Button,
-                }); table.insert(Library.SpecificCorners, ButtonCorner)
+                })
 
                 local ButtonContent = New("Frame", {
                     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -13191,6 +13203,8 @@ function Library:CreateWindow(WindowInfo)
 
                     ButtonCorner.TopLeftRadius = UDim.new(0, TabIndex == FirstTab and Radius or 0)
                     ButtonCorner.TopRightRadius = UDim.new(0, TabIndex == LastTab and Radius or 0)
+                    ButtonCorner.BottomLeftRadius = UDim.new(0, 0)
+                    ButtonCorner.BottomRightRadius = UDim.new(0, 0)
                 end
 
                 function Tab:Destroy()
@@ -14054,20 +14068,20 @@ function Library:CreateWindow(WindowInfo)
                 Parent = TabButton,
             })
             local ButtonPadding = New("UIPadding", {
-                PaddingBottom = UDim.new(0, IsCompact and 6 or 8),
-                PaddingLeft = UDim.new(0, IsCompact and 6 or 10),
-                PaddingRight = UDim.new(0, IsCompact and 6 or 10),
-                PaddingTop = UDim.new(0, IsCompact and 6 or 8),
+                PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
+                PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
+                PaddingRight = UDim.new(0, IsCompact and 6 or 12),
+                PaddingTop = UDim.new(0, IsCompact and 6 or 11),
                 Parent = ButtonHolder,
             })
 
-            local LabelOffset = if Icon then 28 else 4
+            local LabelOffset = if Icon then 30 else 4
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.fromOffset(LabelOffset, 0),
                 Size = UDim2.new(1, -LabelOffset, 1, 0),
                 Text = Name,
-                TextSize = 14,
+                TextSize = 15,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Visible = not IsCompact,
