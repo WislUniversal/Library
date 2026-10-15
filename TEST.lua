@@ -4563,9 +4563,9 @@ do
 
         local Picker = New("TextButton", {
             BackgroundColor3 = "MainColor",
-            Size = UDim2.fromOffset(18, 18),
+            Size = UDim2.fromOffset(20, 20),
             Text = (IsForButton and SlideOverflow) and "" or KeyPicker.Value,
-            TextSize = 14,
+            TextSize = 12,
             TextTransparency = 0.4,
             Parent = ToggleLabel,
         })
@@ -4648,7 +4648,7 @@ do
         if IsForButton then
             local Holder = New("Frame", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 21),
+                Size = UDim2.new(1, 0, 0, 30),
                 Parent = ToggleLabel.Parent,
             })
 
@@ -4666,7 +4666,7 @@ do
             ToggleLabel.Parent = Holder
             Picker.Parent = Holder
 
-            Picker.Size = UDim2.new(0, 18, 1, 0)
+            Picker.Size = UDim2.new(0, 24, 1, 0)
         end
 
         local KeybindsToggle = { Normal = KeyPicker.Mode ~= "Toggle" }
@@ -5553,7 +5553,7 @@ do
 
         local Holder = New("TextButton", {
             BackgroundColor3 = ColorPicker.Value,
-            Size = UDim2.fromOffset(18, 18),
+            Size = UDim2.fromOffset(20, 20),
             Text = "",
             Parent = ToggleLabel,
         })
@@ -6502,7 +6502,7 @@ do
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 0),
                 Text = Text,
-                TextSize = 14,
+                TextSize = 12,
                 TextTransparency = 0.5,
                 TextXAlignment = Enum.TextXAlignment.Center,
                 Parent = InnerHolder,
@@ -6609,13 +6609,13 @@ do
 
             Data.Text = Params.Text or ""
             Data.DoesWrap = Params.DoesWrap or false
-            Data.Size = Params.Size or 14
+            Data.Size = Params.Size or 13
             Data.Visible = if typeof(Params.Visible) == "boolean" then Params.Visible else true
             Data.Idx = typeof(Second) == "table" and First or nil
         else
             Data.Text = First or ""
             Data.DoesWrap = Second or false
-            Data.Size = 14
+            Data.Size = 13
             Data.Visible = true
             Data.Idx = select(3, ...) or nil
         end
@@ -6827,7 +6827,7 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 26),
+            Size = UDim2.new(1, 0, 0, 30),
             Parent = Container,
         })
 
@@ -6844,8 +6844,8 @@ do
                 BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor",
                 Size = UDim2.fromScale(1, 1),
                 Text = Button.Text,
-                TextSize = 14,
-                TextTransparency = 0.4,
+                TextSize = 13,
+                TextTransparency = 0.2,
                 Visible = Button.Visible,
                 Parent = Holder,
             })
@@ -7451,7 +7451,7 @@ do
         local Button = New("TextButton", {
             Active = not Toggle.Disabled,
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 22),
+            Size = UDim2.new(1, 0, 0, 30),
             Text = "",
             Visible = Toggle.Visible,
             Parent = Container,
@@ -7459,10 +7459,10 @@ do
 
         local Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -44, 1, 0),
+            Size = UDim2.new(1, -48, 1, 0),
             Text = Toggle.Text,
-            TextSize = 14,
-            TextTransparency = 0.4,
+            TextSize = 13,
+            TextTransparency = 0.2,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Button,
         })
@@ -7478,7 +7478,7 @@ do
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundColor3 = "MainColor",
             Position = UDim2.new(1, 0, 0.5, 0),
-            Size = UDim2.fromOffset(36, 20),
+            Size = UDim2.fromOffset(38, 20),
             Parent = Button,
         })
         New("UICorner", {
@@ -7486,10 +7486,10 @@ do
             Parent = Switch,
         })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 2),
-            PaddingLeft = UDim.new(0, 2),
-            PaddingRight = UDim.new(0, 2),
-            PaddingTop = UDim.new(0, 2),
+            PaddingBottom = UDim.new(0, 3),
+            PaddingLeft = UDim.new(0, 3),
+            PaddingRight = UDim.new(0, 3),
+            PaddingTop = UDim.new(0, 3),
             Parent = Switch,
         })
         local SwitchStroke = New("UIStroke", {
@@ -7726,16 +7726,16 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 44),
+            Size = UDim2.new(1, 0, 0, 50),
             Visible = Input.Visible,
             Parent = Container,
         })
 
         local Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 14),
+            Size = UDim2.new(1, 0, 0, 16),
             Text = Input.Text,
-            TextSize = 14,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
         })
@@ -7746,19 +7746,20 @@ do
             ClearTextOnFocus = not Input.Disabled and Input.ClearTextOnFocus,
             PlaceholderText = Input.Placeholder,
             Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 26),
+            Size = UDim2.new(1, 0, 0, 30),
             Text = Input.Value,
             TextEditable = not Input.Disabled,
-            TextScaled = true,
+            TextScaled = false,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Holder,
         })
 
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 0),
             PaddingLeft = UDim.new(0, 10),
             PaddingRight = UDim.new(0, 10),
-            PaddingTop = UDim.new(0, 4),
+            PaddingTop = UDim.new(0, 0),
             Parent = Box,
         })
 
@@ -7981,7 +7982,7 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, Info.Compact and 16 or 36),
+            Size = UDim2.new(1, 0, 0, Info.Compact and 30 or 50),
             Visible = Slider.Visible,
             Parent = Container,
         })
@@ -7990,9 +7991,9 @@ do
         if not Info.Compact then
             SliderLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 14),
+                Size = UDim2.new(1, 0, 0, 16),
                 Text = Slider.Text,
-                TextSize = 14,
+                TextSize = 13,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = Holder,
             })
@@ -8003,7 +8004,7 @@ do
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
             Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 16),
+            Size = UDim2.new(1, 0, 0, Info.Compact and 30 or 24),
             Text = "",
             Parent = Holder,
         })
@@ -8017,7 +8018,7 @@ do
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Text = "",
-            TextSize = 14,
+            TextSize = 12,
             ZIndex = Bar.ZIndex + 2,
             Parent = Bar,
         })
@@ -8035,7 +8036,7 @@ do
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 1),
                 Text = "",
-                TextSize = 14,
+                TextSize = 12,
                 ZIndex = Bar.ZIndex + 3,
                 Visible = false,
                 ClearTextOnFocus = false,
@@ -8446,16 +8447,16 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, Dropdown.Text and 44 or 26),
+            Size = UDim2.new(1, 0, 0, Dropdown.Text and 50 or 30),
             Visible = Dropdown.Visible,
             Parent = Container,
         })
 
         local Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 14),
+            Size = UDim2.new(1, 0, 0, 16),
             Text = Dropdown.Text,
-            TextSize = 14,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Visible = not not Info.Text,
             ZIndex = 3,
@@ -8466,7 +8467,7 @@ do
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
             Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 26),
+            Size = UDim2.new(1, 0, 0, 30),
             Text = "",
             TextTransparency = 1,
             ZIndex = 2,
@@ -8475,7 +8476,7 @@ do
 
         New("UIPadding", {
             PaddingLeft = UDim.new(0, 10),
-            PaddingRight = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 8),
             Parent = DisplayContainer,
         })
 
@@ -8505,9 +8506,9 @@ do
         local DisplayButton = New("TextButton", {
             Active = not Dropdown.Disabled,
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 21),
+            Size = UDim2.new(1, -24, 1, 0),
             Text = "---",
-            TextSize = 14,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 2,
             Parent = DisplayContainer,
@@ -11779,7 +11780,8 @@ function Library:CreateWindow(WindowInfo)
             BackgroundColor3 = "MainColor",
             PlaceholderText = "Search",
             Size = WindowInfo.SearchbarSize,
-            TextScaled = true,
+            TextScaled = false,
+            TextSize = 13,
             Visible = not (WindowInfo.DisableSearch or false),
             LayoutOrder = 2,
             Parent = RightWrapper,
