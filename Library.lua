@@ -157,7 +157,7 @@ do
     end
 
     for AssetName, _ in CustomImageManagerAssets do
-        CustomImageManager.DownloadAsset(AssetName)
+        task.spawn(CustomImageManager.DownloadAsset, AssetName)
     end
 end
 
@@ -295,7 +295,7 @@ local Library = {
     },
 
     --// Registry \\--
-    Registry = {},
+    Registry = setmetatable({}, { __mode = "k" }),
     Scales = {},
     ScalesOffset = {},
 
@@ -408,11 +408,12 @@ local Templates = {
         IsMobile = nil,
         ShowMobileButtons = true,
         ShowLockButton = false,
-        MobileButtonsSide = "Left",
-        MobileButtonsOffset = UDim2.fromOffset(56, 28),
+        MobileButtonsSide = "Top",
+        MobileButtonsOffset = UDim2.fromOffset(0, 0),
+        ToggleTitle = "Wisl Universal",
         ToggleIcon = "rbxassetid://81779667323093",
-        ToggleIconSize = UDim2.fromOffset(50, 50),
-        ToggleIconScale = 0.88,
+        ToggleIconSize = UDim2.fromOffset(144, 28),
+        ToggleIconScale = 1,
         ToggleBackgroundColor = "BackgroundColor",
         ToggleIconColor = "FontColor",
 
@@ -803,21 +804,28 @@ local function FuzzyScore(Text: string, Search: string): (boolean, number)
     local Score = 0
     local RunLength = 0
     local LastMatchIdx = 0
+    local SearchByte = string.byte(Search, SearchIdx)
 
     for TextIdx = 1, TextLen do
-        if SearchIdx > SearchLen then
-            break
-        end
-
-        if Text:sub(TextIdx, TextIdx) == Search:sub(SearchIdx, SearchIdx) then
-            local PrevChar = TextIdx > 1 and Text:sub(TextIdx - 1, TextIdx - 1) or ""
-            local AtBoundary = TextIdx == 1 or PrevChar:match("[%s%p_]") ~= nil
+        if string.byte(Text, TextIdx) == SearchByte then
+            local PrevByte = TextIdx > 1 and string.byte(Text, TextIdx - 1) or 0
+            local AtBoundary = TextIdx == 1
+                or PrevByte == 32
+                or (PrevByte >= 9 and PrevByte <= 13)
+                or (PrevByte >= 33 and PrevByte <= 47)
+                or (PrevByte >= 58 and PrevByte <= 64)
+                or (PrevByte >= 91 and PrevByte <= 96)
+                or (PrevByte >= 123 and PrevByte <= 126)
 
             RunLength = (LastMatchIdx == TextIdx - 1) and (RunLength + 1) or 1
             Score += 1 + (AtBoundary and 6 or 0) + math.min(RunLength - 1, 5) * 3
 
             LastMatchIdx = TextIdx
             SearchIdx += 1
+            if SearchIdx > SearchLen then
+                break
+            end
+            SearchByte = string.byte(Search, SearchIdx)
         end
     end
 
@@ -1657,6 +1665,11 @@ local function SetAlwaysOnTop(Gui: ScreenGui, Enabled: boolean)
     end
 
     pcall(function()
+        if not Enabled and not Gui:GetAttribute("_WislOnTopOfCoreBlur") then
+            return
+        end
+        Gui:SetAttribute("_WislOnTopOfCoreBlur", Enabled or nil)
+
         if sethiddenproperty then
             sethiddenproperty(Gui, "OnTopOfCoreBlur", Enabled)
         elseif setscriptable then
@@ -1672,6 +1685,7 @@ local ScreenGui = New("ScreenGui", {
     DisplayOrder = 998,
     ResetOnSpawn = false,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    IgnoreGuiInset = true,
 })
 ParentUI(ScreenGui)
 Library.ScreenGui = ScreenGui
@@ -1829,9 +1843,41 @@ function Library:SetIconModule(module: IconModule)
 end
 
 local OnlineFetchIcons, OnlineIcons = pcall(function()
-    return (loadstring(
-        game:HttpGet("https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/refs/heads/main/source.lua")
-    ) :: () -> IconModule)()
+    local CachePath = "Obsidian/custom_assets/lucide_icons.lua"
+
+    if isfile and readfile then
+        local readOk, cached = pcall(function()
+            if isfile(CachePath) then
+                return readfile(CachePath)
+            end
+        end)
+        if readOk and typeof(cached) == "string" and #cached > 0 then
+            local testOk, module = pcall(function()
+                return (loadstring(cached) :: () -> IconModule)()
+            end)
+            if testOk and module then
+                return module
+            end
+        end
+    end
+
+    local fetchOk, fetched = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/refs/heads/main/source.lua")
+    end)
+    if fetchOk and typeof(fetched) == "string" and #fetched > 0 then
+        if writefile then
+            pcall(function()
+                if isfolder and makefolder then
+                    if not isfolder("Obsidian") then makefolder("Obsidian") end
+                    if not isfolder("Obsidian/custom_assets") then makefolder("Obsidian/custom_assets") end
+                end
+                writefile(CachePath, fetched)
+            end)
+        end
+        return (loadstring(fetched) :: () -> IconModule)()
+    end
+
+    error("Failed to fetch or load Lucide icons")
 end)
 if OnlineFetchIcons and OnlineIcons then
     Library:SetIconModule(OnlineIcons)
@@ -2851,8 +2897,14 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             SyncPopOutVisibility(Box)
             RaiseFloat()
 
+            local ResizeThread = nil
             Float:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-                Box:Resize()
+                if ResizeThread then
+                    task.cancel(ResizeThread)
+                end
+                ResizeThread = task.delay(0.08, function()
+                    Box:Resize()
+                end)
             end)
 
             if Options.After then
@@ -2916,7 +2968,11 @@ function Library:MakeBoxPopOut(Box: any, Options: {
     end
 
     --// Drag Handler
-    local function StopDrag()
+    local StopDrag
+    local UpdateDrag
+    local BeginDrag
+
+    function StopDrag()
         if DragState == "Idle" then
             return
         end
@@ -2955,7 +3011,46 @@ function Library:MakeBoxPopOut(Box: any, Options: {
         end
     end
 
-    local function BeginDrag(Input: InputObject)
+    function UpdateDrag(Input: InputObject)
+        if DragState ~= "Dragging" or not PressMouse then
+            return
+        end
+        if not (ScreenGui and ScreenGui.Parent) then
+            StopDrag()
+            return
+        end
+
+        local MousePosition = Vector2.new(Input.Position.X, Input.Position.Y)
+        local Delta = MousePosition - PressMouse
+
+        if not Box.PoppedOut then
+            if Delta.Magnitude < Library.PopOutDragThreshold then
+                return
+            end
+
+            Box:SetPoppedOut(true)
+            if not Float then
+                return
+            end
+
+            RaiseFloat()
+            DragStartPos = Float.Position
+            DragDidMove = true
+        elseif Delta.Magnitude >= Library.PopOutDragThreshold then
+            DragDidMove = true
+        end
+
+        if Float and DragStartPos then
+            Float.Position = UDim2.new(
+                DragStartPos.X.Scale,
+                DragStartPos.X.Offset + Delta.X,
+                DragStartPos.Y.Scale,
+                DragStartPos.Y.Offset + Delta.Y
+            )
+        end
+    end
+
+    function BeginDrag(Input: InputObject)
         if DragState ~= "Idle" or Box.Destroyed or not (ScreenGui and ScreenGui.Parent) then
             return
         end
@@ -3008,45 +3103,6 @@ function Library:MakeBoxPopOut(Box: any, Options: {
                 DragStartPos = Float.Position
             end
         end)
-    end
-
-    local function UpdateDrag(Input: InputObject)
-        if DragState ~= "Dragging" or not PressMouse then
-            return
-        end
-        if not (ScreenGui and ScreenGui.Parent) then
-            StopDrag()
-            return
-        end
-
-        local MousePosition = Vector2.new(Input.Position.X, Input.Position.Y)
-        local Delta = MousePosition - PressMouse
-
-        if not Box.PoppedOut then
-            if Delta.Magnitude < Library.PopOutDragThreshold then
-                return
-            end
-
-            Box:SetPoppedOut(true)
-            if not Float then
-                return
-            end
-
-            RaiseFloat()
-            DragStartPos = Float.Position
-            DragDidMove = true
-        elseif Delta.Magnitude >= Library.PopOutDragThreshold then
-            DragDidMove = true
-        end
-
-        if Float and DragStartPos then
-            Float.Position = UDim2.new(
-                DragStartPos.X.Scale,
-                DragStartPos.X.Offset + Delta.X,
-                DragStartPos.Y.Scale,
-                DragStartPos.Y.Offset + Delta.Y
-            )
-        end
     end
 
     local function BindDragSource(Gui: GuiObject)
@@ -3262,6 +3318,14 @@ function Library:AddDraggableButton(...)
     local IconColor
     local GradientColors
     local IconScale
+    local Font
+    local TextColor3
+    local TextSize
+    local SquareTop = false
+    local BackgroundTransparency
+    local StrokeColor
+    local StrokeTransparency
+    local StrokeThickness
 
     if typeof(Params) == "table" then
         Text = Params.Text
@@ -3272,9 +3336,17 @@ function Library:AddDraggableButton(...)
         Size = Params.Size
         CornerRadius = Params.CornerRadius
         BackgroundColor3 = Params.BackgroundColor3
+        BackgroundTransparency = Params.BackgroundTransparency or Params.Transparency
         IconColor = Params.IconColor
         GradientColors = Params.GradientColors
         IconScale = Params.IconScale or Params.ImageScale
+        Font = Params.Font
+        TextColor3 = Params.TextColor3
+        TextSize = Params.TextSize
+        SquareTop = Params.SquareTop or false
+        StrokeColor = Params.StrokeColor or Params.OutlineColor
+        StrokeTransparency = Params.StrokeTransparency or Params.OutlineTransparency
+        StrokeThickness = Params.StrokeThickness or Params.OutlineThickness
     elseif typeof(Params) == "string" then
         Text = Params
         Func = select(2, ...)
@@ -3282,9 +3354,13 @@ function Library:AddDraggableButton(...)
         ExcludeDragging = select(4, ...)
     end
 
+    local CustomIconData = nil
     if Icon then
-        if typeof(Icon) == "number" or (typeof(Icon) == "string" and tonumber(Icon)) then
-            Icon = "rbxassetid://" .. tostring(Icon)
+        CustomIconData = Library:GetCustomIcon(Icon)
+        if not (typeof(CustomIconData) == "table" and CustomIconData.Url) then
+            if typeof(Icon) == "number" or (typeof(Icon) == "string" and tonumber(Icon)) then
+                Icon = "rbxassetid://" .. tostring(Icon)
+            end
         end
     end
 
@@ -3293,23 +3369,65 @@ function Library:AddDraggableButton(...)
         Destroyed = false,
     }
 
+    local HasDualContent = Icon ~= nil and Text ~= nil and #Text > 0
+
+    local DefaultButtonSize
+    if HasDualContent then
+        DefaultButtonSize = UDim2.fromOffset(144, 28)
+    elseif Icon then
+        DefaultButtonSize = UDim2.fromOffset(50, 50)
+    elseif Text and #Text > 0 then
+        local TargetFont = if typeof(Font) == "Font" then Font else Library.Scheme.Font
+        local DefW, DefH = Library:GetTextBounds(Text, TargetFont, TextSize or 16)
+        DefaultButtonSize = UDim2.fromOffset(DefW + 16, DefH + 8)
+    else
+        DefaultButtonSize = UDim2.fromOffset(0, 0)
+    end
+
+    local CornerPx = 10
+    if CornerRadius then
+        CornerPx = if typeof(CornerRadius) == "number" then CornerRadius elseif typeof(CornerRadius) == "UDim" then CornerRadius.Offset else 10
+    end
+
+    local ButtonSize = Size or DefaultButtonSize
+    local VisibleHeight = ButtonSize.Y.Offset
+    local TopOffset = if SquareTop then (CornerPx + 4) else 0
+    local ActualButtonSize = if SquareTop then UDim2.new(ButtonSize.X.Scale, ButtonSize.X.Offset, ButtonSize.Y.Scale, ButtonSize.Y.Offset + TopOffset) else ButtonSize
+
     local Button = New("TextButton", {
         Active = true,
         AutoButtonColor = false,
         BackgroundColor3 = BackgroundColor3 or "BackgroundColor",
+        BackgroundTransparency = BackgroundTransparency or (SquareTop and 0.22 or 0),
+        BorderSizePixel = 0,
+        BorderColor3 = Color3.new(0, 0, 0),
         Position = UDim2.fromOffset(6, 6),
-        Size = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(0, 0),
-        Text = (not Icon and Text) or "",
-        TextSize = 16,
+        Size = ActualButtonSize,
+        Text = (not HasDualContent and not Icon and Text) or "",
+        TextSize = TextSize or 16,
         ZIndex = 1,
         Parent = Floats,
     })
 
+    if Font then
+        if typeof(Font) == "Font" then
+            Button.FontFace = Font
+        else
+            Button.Font = Font
+        end
+    end
+
+    local CornerVal = if CornerRadius
+        then (if typeof(CornerRadius) == "UDim" then CornerRadius else UDim.new(0, CornerRadius))
+        else (if SquareTop then UDim.new(0, 10) elseif HasDualContent then UDim.new(1, 0) else UDim.new(0, Library.CornerRadius))
+
     local CornerObj = New("UICorner", {
-        CornerRadius = UDim.new(0, CornerRadius or Library.CornerRadius),
+        CornerRadius = CornerVal,
         Parent = Button,
     })
-    table.insert(Library.Corners, CornerObj)
+    if not SquareTop then
+        table.insert(Library.Corners, CornerObj)
+    end
 
     if not ExcludeScaling then
         table.insert(
@@ -3319,11 +3437,84 @@ function Library:AddDraggableButton(...)
             })
         )
     end
-    local BaseSize = Size or (Icon and UDim2.fromOffset(50, 50)) or UDim2.fromOffset(50, 50)
-    local OutlineStroke, ShadowStroke = Library:AddOutline(Button)
+    local OutlineStroke = nil
+    local ShadowStroke = nil
+
+    if SquareTop then
+        OutlineStroke = New("UIStroke", {
+            Color = StrokeColor or "OutlineColor",
+            Thickness = StrokeThickness or 1,
+            Transparency = StrokeTransparency or 0.2,
+            LineJoinMode = Enum.LineJoinMode.Round,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            Parent = Button,
+        })
+    else
+        OutlineStroke, ShadowStroke = Library:AddOutline(Button)
+    end
 
     local IconLabel
-    if Icon then
+    local TextLabel
+    if HasDualContent then
+        local IconImage = if typeof(CustomIconData) == "table" and CustomIconData.Url then CustomIconData.Url else tostring(Icon)
+        local RectOffset = if typeof(CustomIconData) == "table" and CustomIconData.ImageRectOffset then CustomIconData.ImageRectOffset else Vector2.zero
+        local RectSize = if typeof(CustomIconData) == "table" and CustomIconData.ImageRectSize then CustomIconData.ImageRectSize else Vector2.zero
+
+        local IconBase = math.max(VisibleHeight - 8, 20)
+        local ResolvedIconScale = if typeof(IconScale) == "number"
+            then UDim2.fromOffset(math.round(IconBase * IconScale), math.round(IconBase * IconScale))
+            elseif typeof(IconScale) == "UDim2"
+            then IconScale
+            else UDim2.fromOffset(IconBase, IconBase)
+
+        local ContentCenterY = if SquareTop then (TopOffset + VisibleHeight * 0.5) else (Button.Size.Y.Offset * 0.5)
+
+        IconLabel = New("ImageLabel", {
+            Active = false,
+            Selectable = false,
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            Image = IconImage,
+            ImageRectOffset = RectOffset,
+            ImageRectSize = RectSize,
+            ImageColor3 = IconColor or "FontColor",
+            Position = UDim2.new(0, 10, 0, ContentCenterY),
+            Size = ResolvedIconScale,
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 2,
+            Parent = Button,
+        })
+        DraggableButton.IconLabel = IconLabel
+
+        TextLabel = New("TextLabel", {
+            Active = false,
+            Selectable = false,
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 36, 0, ContentCenterY),
+            Size = UDim2.new(1, -46, 0, VisibleHeight),
+            Text = Text,
+            TextColor3 = TextColor3 or "FontColor",
+            TextSize = TextSize or 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 2,
+            Parent = Button,
+        })
+
+        if Font then
+            if typeof(Font) == "Font" then
+                TextLabel.FontFace = Font
+            else
+                TextLabel.Font = Font
+            end
+        end
+        DraggableButton.TextLabel = TextLabel
+    elseif Icon then
+        local IconImage = if typeof(CustomIconData) == "table" and CustomIconData.Url then CustomIconData.Url else tostring(Icon)
+        local RectOffset = if typeof(CustomIconData) == "table" and CustomIconData.ImageRectOffset then CustomIconData.ImageRectOffset else Vector2.zero
+        local RectSize = if typeof(CustomIconData) == "table" and CustomIconData.ImageRectSize then CustomIconData.ImageRectSize else Vector2.zero
+
         local ResolvedIconScale = if typeof(IconScale) == "number"
             then UDim2.fromScale(IconScale, IconScale)
             elseif typeof(IconScale) == "UDim2"
@@ -3335,7 +3526,9 @@ function Library:AddDraggableButton(...)
             Selectable = false,
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundTransparency = 1,
-            Image = Icon,
+            Image = IconImage,
+            ImageRectOffset = RectOffset,
+            ImageRectSize = RectSize,
             ImageColor3 = IconColor or "FontColor",
             Position = UDim2.fromScale(0.5, 0.5),
             Size = ResolvedIconScale,
@@ -3533,6 +3726,10 @@ function Library:AddDraggableButton(...)
         if not NewText then
             return
         end
+        if DraggableButton.TextLabel then
+            DraggableButton.TextLabel.Text = NewText
+            return
+        end
         local X, Y = Library:GetTextBounds(NewText, Library.Scheme.Font, 16)
 
         Button.Text = NewText
@@ -3540,11 +3737,21 @@ function Library:AddDraggableButton(...)
     end
 
     function DraggableButton:SetIcon(NewIcon: any)
-        if typeof(NewIcon) == "number" or (typeof(NewIcon) == "string" and tonumber(NewIcon)) then
-            NewIcon = "rbxassetid://" .. tostring(NewIcon)
+        if not DraggableButton.IconLabel then
+            return
         end
-        if DraggableButton.IconLabel then
+        local CustomIcon = Library:GetCustomIcon(NewIcon)
+        if typeof(CustomIcon) == "table" and CustomIcon.Url then
+            DraggableButton.IconLabel.Image = CustomIcon.Url
+            DraggableButton.IconLabel.ImageRectOffset = CustomIcon.ImageRectOffset or Vector2.zero
+            DraggableButton.IconLabel.ImageRectSize = CustomIcon.ImageRectSize or Vector2.zero
+        else
+            if typeof(NewIcon) == "number" or (typeof(NewIcon) == "string" and tonumber(NewIcon)) then
+                NewIcon = "rbxassetid://" .. tostring(NewIcon)
+            end
             DraggableButton.IconLabel.Image = tostring(NewIcon)
+            DraggableButton.IconLabel.ImageRectOffset = Vector2.zero
+            DraggableButton.IconLabel.ImageRectSize = Vector2.zero
         end
     end
 
@@ -3582,6 +3789,11 @@ function Library:AddDraggableButton(...)
         local ElemIdx = table.find(Library.DraggableElements, Button)
         if ElemIdx then
             table.remove(Library.DraggableElements, ElemIdx)
+        end
+
+        local CornerIdx = table.find(Library.Corners, CornerObj)
+        if CornerIdx then
+            table.remove(Library.Corners, CornerIdx)
         end
 
         if Button then
@@ -4195,20 +4407,6 @@ table.insert(
         Parent = TooltipLabel,
     })
 )
-TooltipLabel:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
-    if Library.Unloaded then
-        return
-    end
-
-    local X, _ = Library:GetTextBounds(
-        TooltipLabel.Text,
-        TooltipLabel.FontFace,
-        TooltipLabel.TextSize,
-        (workspace.CurrentCamera.ViewportSize.X - TooltipLabel.AbsolutePosition.X - 8) / Library.DPIScale
-    )
-
-    TooltipLabel.Size = UDim2.fromOffset(X + 8, 0)
-end)
 
 local CurrentHoverInstance
 function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInstance: GuiObject)
@@ -4238,7 +4436,13 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             TooltipLabel.Parent = ScreenGui
         end
 
-        TooltipLabel.Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
+        local Text = TooltipTable.Disabled and DisabledInfoStr or InfoStr
+        TooltipLabel.Text = Text
+
+        local ViewportWidth = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 1920
+        local MaxW = math.max(120, (ViewportWidth - Mouse.X - 24) / Library.DPIScale)
+        local BoundsX, _ = Library:GetTextBounds(Text, TooltipLabel.FontFace, TooltipLabel.TextSize, MaxW)
+        TooltipLabel.Size = UDim2.fromOffset(BoundsX + 8, 0)
         TooltipLabel.Visible = true
 
         while
@@ -4247,10 +4451,15 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
             and Library:MouseIsOverFrame(HoverInstance, Mouse)
             and not (CurrentMenu and Library:MouseIsOverFrame(CurrentMenu.Menu, Mouse))
         do
-            TooltipLabel.Position = UDim2.fromOffset(
-                Mouse.X + (Library.ShowCustomCursor and 8 or 14),
-                Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
-            )
+            local TargetX = Mouse.X + (Library.ShowCustomCursor and 8 or 14)
+            local TargetY = Mouse.Y + (Library.ShowCustomCursor and 8 or 12)
+            local CurViewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local TooltipWidth = TooltipLabel.AbsoluteSize.X
+            if TargetX + TooltipWidth > CurViewport.X - 12 then
+                TargetX = CurViewport.X - TooltipWidth - 12
+            end
+
+            TooltipLabel.Position = UDim2.fromOffset(TargetX, TargetY)
 
             RunService.RenderStepped:Wait()
         end
@@ -8319,6 +8528,15 @@ do
                 Library.ActiveLoading.Sidebar.Container.ScrollingEnabled = false
             end
 
+            local InitialLocation = Mouse.X
+            local InitialScale = math.clamp((InitialLocation - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+            local ClickVal = Round(Slider.Min + ((Slider.Max - Slider.Min) * InitialScale), Slider.Rounding)
+            if Slider.Value ~= ClickVal then
+                Slider.Value = ClickVal
+                Slider:Display()
+                Slider:RunChanged()
+            end
+
             while IsDragInput(Input) and not Slider.Destroyed do
                 local Location = Mouse.X
                 local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
@@ -8326,8 +8544,8 @@ do
                 local OldValue = Slider.Value
                 Slider.Value = Round(Slider.Min + ((Slider.Max - Slider.Min) * Scale), Slider.Rounding)
 
-                Slider:Display()
                 if Slider.Value ~= OldValue then
+                    Slider:Display()
                     Slider:RunChanged()
                 end
 
@@ -8907,6 +9125,26 @@ do
         local DraggingThumb = false
         local DragStartY = 0
         local DragStartCanvasY = 0
+        local DragMoveConn = nil
+        local DragEndConn = nil
+
+        local function StopThumbDrag(Input)
+            if DraggingThumb and (not Input or Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                DraggingThumb = false
+                if DragMoveConn then
+                    DragMoveConn:Disconnect()
+                    DragMoveConn = nil
+                end
+                if DragEndConn then
+                    DragEndConn:Disconnect()
+                    DragEndConn = nil
+                end
+                TweenService:Create(ScrollThumb, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.OutlineColor,
+                    BackgroundTransparency = 0.2,
+                }):Play()
+            end
+        end
 
         table.insert(Dropdown.Connections, ScrollThumb.InputBegan:Connect(function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
@@ -8917,6 +9155,30 @@ do
                     BackgroundColor3 = Library.Scheme.AccentColor,
                     BackgroundTransparency = 0,
                 }):Play()
+
+                if DragMoveConn then DragMoveConn:Disconnect() end
+                if DragEndConn then DragEndConn:Disconnect() end
+
+                DragMoveConn = UserInputService.InputChanged:Connect(function(MoveInput)
+                    if DraggingThumb and (MoveInput.UserInputType == Enum.UserInputType.MouseMovement or MoveInput.UserInputType == Enum.UserInputType.Touch) then
+                        local DeltaY = MoveInput.Position.Y - DragStartY
+                        local TrackHeight = ScrollTrack.AbsoluteSize.Y
+                        local WindowHeight = ModalList.AbsoluteWindowSize.Y
+                        local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
+                        local MaxScroll = CanvasHeight - WindowHeight
+                        if MaxScroll > 0 and TrackHeight > 0 then
+                            local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
+                            local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
+                            local ScrollableTrack = TrackHeight - ThumbHeight
+                            if ScrollableTrack > 0 then
+                                local ScrollDelta = (DeltaY / ScrollableTrack) * MaxScroll
+                                ModalList.CanvasPosition = Vector2.new(0, math.clamp(DragStartCanvasY + ScrollDelta, 0, MaxScroll))
+                            end
+                        end
+                    end
+                end)
+
+                DragEndConn = UserInputService.InputEnded:Connect(StopThumbDrag)
             end
         end))
 
@@ -8938,37 +9200,6 @@ do
                 end
             end
         end))
-
-        table.insert(Dropdown.Connections, UserInputService.InputChanged:Connect(function(Input)
-            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
-                local DeltaY = Input.Position.Y - DragStartY
-                local TrackHeight = ScrollTrack.AbsoluteSize.Y
-                local WindowHeight = ModalList.AbsoluteWindowSize.Y
-                local CanvasHeight = ModalList.AbsoluteCanvasSize.Y
-                local MaxScroll = CanvasHeight - WindowHeight
-                if MaxScroll > 0 and TrackHeight > 0 then
-                    local Ratio = math.clamp(WindowHeight / CanvasHeight, 0.05, 1)
-                    local ThumbHeight = math.clamp(math.floor(TrackHeight * Ratio), 24, TrackHeight)
-                    local ScrollableTrack = TrackHeight - ThumbHeight
-                    if ScrollableTrack > 0 then
-                        local ScrollDelta = (DeltaY / ScrollableTrack) * MaxScroll
-                        ModalList.CanvasPosition = Vector2.new(0, math.clamp(DragStartCanvasY + ScrollDelta, 0, MaxScroll))
-                    end
-                end
-            end
-        end))
-
-        local function StopThumbDrag(Input)
-            if DraggingThumb and (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
-                DraggingThumb = false
-                TweenService:Create(ScrollThumb, Library.TweenInfo, {
-                    BackgroundColor3 = Library.Scheme.OutlineColor,
-                    BackgroundTransparency = 0.2,
-                }):Play()
-            end
-        end
-
-        table.insert(Dropdown.Connections, UserInputService.InputEnded:Connect(StopThumbDrag))
 
         table.insert(Dropdown.Connections, ScrollThumb.MouseEnter:Connect(function()
             if not DraggingThumb then
@@ -9021,6 +9252,10 @@ do
                 Dropdown.Menu.Active = true
             end
 
+            if Dropdown.PendingBuild then
+                Dropdown:BuildDropdownList()
+            end
+
             pcall(function()
                 local WSize = TargetWindow.AbsoluteSize
                 if WSize and WSize.X > 0 and WSize.Y > 0 then
@@ -9055,7 +9290,7 @@ do
                 return
             end
 
-            DraggingThumb = false
+            StopThumbDrag()
             Dropdown.ActiveModal = false
             if Dropdown.Menu then
                 Dropdown.Menu.Active = false
@@ -9519,6 +9754,12 @@ do
         end
 
         function Dropdown:BuildDropdownList()
+            if not Dropdown.ActiveModal then
+                Dropdown.PendingBuild = true
+                return
+            end
+            Dropdown.PendingBuild = false
+
             StopDragSelect()
             RecomputeFilteredEntries()
 
@@ -11057,13 +11298,11 @@ function Library:Notify(...)
         ZIndex = 5,
         Parent = FakeBackground,
     })
-    table.insert(
-        Library.Corners,
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = Holder,
-        })
-    )
+    local NotifyCorner = New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = Holder,
+    })
+    table.insert(Library.Corners, NotifyCorner)
     Library:AddOutline(Holder)
 
     local ContentHolder = New("Frame", {
@@ -11313,6 +11552,10 @@ function Library:Notify(...)
             :Play()
 
         task.delay(Library.NotifyTweenInfo.Time, function()
+            local CornerIdx = table.find(Library.Corners, NotifyCorner)
+            if CornerIdx then
+                table.remove(Library.Corners, CornerIdx)
+            end
             Library.Notifications[FakeBackground] = nil
             FakeBackground:Destroy()
         end)
@@ -12234,6 +12477,9 @@ function Library:CreateWindow(WindowInfo)
         local HalfCurrent = Library.CornerRadius / 2
 
         for _, UICorner in Library.Corners do
+            if UICorner.CornerRadius.Scale > 0 then
+                continue
+            end
             if math.abs(UICorner.CornerRadius.Offset - HalfCurrent) < 0.001 then
                 UICorner.CornerRadius = RadiusHalf
             else
@@ -15024,25 +15270,36 @@ function Library:CreateWindow(WindowInfo)
     end
 
     if Library.IsMobile then
-        local ToggleButton
-        if WindowInfo.ToggleIcon then
-            ToggleButton = Library:AddDraggableButton({
-                Icon = WindowInfo.ToggleIcon,
-                Size = WindowInfo.ToggleIconSize or UDim2.fromOffset(50, 50),
-                IconScale = WindowInfo.ToggleIconScale or 0.88,
-                BackgroundColor3 = WindowInfo.ToggleBackgroundColor or "BackgroundColor",
-                IconColor = WindowInfo.ToggleIconColor or "FontColor",
-                Func = function()
-                    Library:Toggle()
-                end,
-                ExcludeScaling = true,
-                ExcludeDragging = false,
-            })
-        else
-            ToggleButton = Library:AddDraggableButton("Toggle", function()
+        local ToggleTextVal = WindowInfo.ToggleTitle or WindowInfo.ToggleText or "Wisl Universal"
+        local ToggleSizeVal = WindowInfo.ToggleIconSize or WindowInfo.ToggleSize or UDim2.fromOffset(150, 28)
+        local ToggleIconVal = WindowInfo.ToggleIcon or WindowInfo.Icon or "box"
+
+        local ToggleCornerVal = WindowInfo.ToggleCornerRadius or 12
+        local ToggleTransparencyVal = WindowInfo.ToggleBackgroundTransparency or WindowInfo.ToggleTransparency or 0.22
+        local ToggleSquareTop = WindowInfo.ToggleSquareTop ~= false
+        local DockTopOffset = if ToggleSquareTop then (ToggleCornerVal + 4) else 0
+
+        local ToggleButton = Library:AddDraggableButton({
+            Icon = ToggleIconVal,
+            Text = ToggleTextVal,
+            Size = ToggleSizeVal,
+            IconScale = WindowInfo.ToggleIconScale or 1,
+            CornerRadius = ToggleCornerVal,
+            SquareTop = ToggleSquareTop,
+            BackgroundColor3 = WindowInfo.ToggleBackgroundColor or "BackgroundColor",
+            BackgroundTransparency = ToggleTransparencyVal,
+            IconColor = WindowInfo.ToggleIconColor or "FontColor",
+            Font = WindowInfo.Font or Library.Scheme.Font,
+            TextColor3 = WindowInfo.ToggleTextColor or "FontColor",
+            StrokeColor = WindowInfo.ToggleStrokeColor or WindowInfo.ToggleOutlineColor or "OutlineColor",
+            StrokeTransparency = WindowInfo.ToggleStrokeTransparency or 0.2,
+            StrokeThickness = WindowInfo.ToggleStrokeThickness or 1,
+            Func = function()
                 Library:Toggle()
-            end, true, false)
-        end
+            end,
+            ExcludeScaling = true,
+            ExcludeDragging = not WindowInfo.ToggleDraggable,
+        })
 
         local LockButton
         if WindowInfo.ShowLockButton then
@@ -15052,23 +15309,32 @@ function Library:CreateWindow(WindowInfo)
             end, true, true)
         end
 
-        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(56, 28)
+        local BaseOffset = WindowInfo.MobileButtonsOffset or UDim2.fromOffset(0, 0)
 
         if WindowInfo.MobileButtonsSide == "Right" then
             ToggleButton.Button.AnchorPoint = Vector2.new(1, 0)
-            ToggleButton.Button.Position = UDim2.new(1, -BaseOffset.X.Offset, 0, BaseOffset.Y.Offset)
+            ToggleButton.Button.Position = UDim2.new(1, -BaseOffset.X.Offset, 0, BaseOffset.Y.Offset - DockTopOffset)
 
             if LockButton then
                 LockButton.Button.AnchorPoint = Vector2.new(1, 0)
                 LockButton.Button.Position = UDim2.new(1, -(BaseOffset.X.Offset + ToggleButton.Button.Size.X.Offset + 10), 0, BaseOffset.Y.Offset)
             end
-        else
+        elseif WindowInfo.MobileButtonsSide == "Left" then
             ToggleButton.Button.AnchorPoint = Vector2.new(0, 0)
-            ToggleButton.Button.Position = BaseOffset
+            ToggleButton.Button.Position = UDim2.new(0, BaseOffset.X.Offset, 0, BaseOffset.Y.Offset - DockTopOffset)
 
             if LockButton then
                 LockButton.Button.AnchorPoint = Vector2.new(0, 0)
                 LockButton.Button.Position = UDim2.fromOffset(BaseOffset.X.Offset + ToggleButton.Button.Size.X.Offset + 10, BaseOffset.Y.Offset)
+            end
+        else
+            -- "Top", "Center", or default
+            ToggleButton.Button.AnchorPoint = Vector2.new(0.5, 0)
+            ToggleButton.Button.Position = UDim2.new(0.5, BaseOffset.X.Offset, 0, BaseOffset.Y.Offset - DockTopOffset)
+
+            if LockButton then
+                LockButton.Button.AnchorPoint = Vector2.new(0, 0)
+                LockButton.Button.Position = UDim2.new(0.5, BaseOffset.X.Offset + (ToggleButton.Button.Size.X.Offset * 0.5) + 8, 0, BaseOffset.Y.Offset)
             end
         end
 
@@ -15086,8 +15352,18 @@ function Library:CreateWindow(WindowInfo)
     end
 
     --// Execution \\--
+    local SearchDebounceThread = nil
     Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        Library:UpdateSearch(SearchBox.Text)
+        if SearchDebounceThread then
+            task.cancel(SearchDebounceThread)
+        end
+        local SearchText = SearchBox.Text
+        SearchDebounceThread = task.delay(0.12, function()
+            if Library.Unloaded then
+                return
+            end
+            Library:UpdateSearch(SearchText)
+        end)
     end))
 
     Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject)
@@ -15106,6 +15382,11 @@ function Library:CreateWindow(WindowInfo)
             -- Dismiss the topmost dialog before closing any open menu --
             if Library.ActiveDialog and Library.ActiveDialog.OutsideClickDismiss ~= false then
                 Library.ActiveDialog:Dismiss()
+                return
+            end
+
+            if Library.ActiveDropdownModal and Library.ActiveDropdownModal.ActiveModal then
+                Library.ActiveDropdownModal:Close()
                 return
             end
 
@@ -15173,7 +15454,8 @@ function Library:CreateLoading(LoadingInfo)
     local ScreenGui = New("ScreenGui", {
         Name = "ObsidianLoading",
         DisplayOrder = 999,
-        ResetOnSpawn = false
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
     })
     ParentUI(ScreenGui)
     Loading.ScreenGui = ScreenGui
@@ -15864,6 +16146,7 @@ Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 function Library:Unload()
     Library.Unloaded = true
+    RestoreMouseIcon()
 
     --// Disconnect connections
     for Index = #Library.Signals, 1, -1 do
